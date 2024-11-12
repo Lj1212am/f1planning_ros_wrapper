@@ -20,7 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'nmpc_ros_rode = f1planning_ros_wrapper.nmpc_ros_wrapper:main',
+            'nmpc_ros_node = f1planning_ros_wrapper.nmpc_ros_wrapper:main',
         ],
     },
 )

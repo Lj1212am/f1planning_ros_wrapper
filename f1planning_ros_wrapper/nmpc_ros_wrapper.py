@@ -34,7 +34,7 @@ class NMPCPlannerNode(Node):
         self.real_car = False
         self.config_path = "/home/lee/work/f1-fifth/src/trajectory_csv/"
         
-        self.csv = "interpolated_trajectory_1.csv"
+        self.csv = "interpolated_trajectory_3_5.csv"
         self.map_name = os.path.join(self.config_path, self.csv)
         self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
         
@@ -120,7 +120,7 @@ class NMPCPlannerNode(Node):
         self.steering_angle = ackerman_msg.drive.steering_angle
         
     def friction_callback(self, mu_msg):
-        self.mu = mu_msg.data
+        self.mu = float(mu_msg.data)
     
     def render_mpc_sol(self):
         """
