@@ -71,7 +71,8 @@ class NMPCPlannerNode(Node):
         self.sub_odom = self.create_subscription(Odometry, odom_topic, self.state_callback, 1)
         self.sub_ackermann = self.create_subscription(AckermannDriveStamped, drive_topic, self.ackerman_callback, 1)
         self.pub_drive = self.create_publisher(AckermannDriveStamped, drive_topic, 1)
-        self.pub_mpc_sol = self.create_publisher(Marker, 'mpc_solution', 10)    
+        self.pub_mpc_sol = self.create_publisher(Marker, 'mpc_solution', 10)
+        self.sub_mu = self.create_subscription(Float32, 'friction_value', self.friction_callback, 10) 
         # Publisher for visualizing waypoints as MarkerArray
         
         self.marker_pub = self.create_publisher(MarkerArray, 'waypoints_markers', 10)
@@ -91,7 +92,10 @@ class NMPCPlannerNode(Node):
         waypointy = self.track.raceline.ys[:waypoint_num]
         waypointyaw = self.track.raceline.yaws[:waypoint_num]
         self.waypoints = np.column_stack((waypointx, waypointy, waypointyaw))
-        self.publish_waypoints_as_markers(self.waypoints)
+        
+        ##setup a timer callpacl to publish waypoints as markers
+        self.timer = self.create_timer(0.1, self.publish_waypoints_as_markers)
+        # self.publish_waypoints_as_markers(self.waypoints)
         
         self.old_steerv = 0.0
         self.old_accl = 0.0
@@ -103,6 +107,7 @@ class NMPCPlannerNode(Node):
         # steer = 0.0
         self.steering_angle = 0.0
         self.speed = 0.0
+        self.mu = None
         
         # drive = AckermannDriveStamped()
         # # drive.drive.steering_angle = 0.3
@@ -113,6 +118,9 @@ class NMPCPlannerNode(Node):
     
     def ackerman_callback(self, ackerman_msg):
         self.steering_angle = ackerman_msg.drive.steering_angle
+        
+    def friction_callback(self, mu_msg):
+        self.mu = mu_msg.data
     
     def render_mpc_sol(self):
         """
@@ -213,7 +221,7 @@ class NMPCPlannerNode(Node):
             # Plan using the NMPC planner
             print('abt to plan so hard')
             try:
-                accl, steerv = self.planner.plan(state_dict)
+                accl, steerv = self.planner.plan(state_dict, self.mu)
                 print('done planning')
                 self.render_mpc_sol()
             except Exception as e:
@@ -242,9 +250,12 @@ class NMPCPlannerNode(Node):
     def publish_waypoints_as_markers(self, waypoints=None, ref=False):
         """ Publish waypoints as visualization markers in RViz """
         marker_array = MarkerArray()
+        
+        if waypoints is None:
+            waypoints = self.waypoints
 
         # Create markers for first 20 waypoints
-        print('num waypoints', len(waypoints))
+        # print('num waypoints', len(waypoints))
         for i, waypoint in enumerate(waypoints[:waypoint_num]):
         # for i, waypoint in enumerate(self.waypoints):
             marker = Marker()

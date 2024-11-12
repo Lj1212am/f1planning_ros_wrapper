@@ -81,7 +81,7 @@ class NMPCPlanner:
                 track.raceline.xs.copy(),
                 track.raceline.ys.copy(),
                 track.raceline.yaws.copy(),
-                track.raceline.vxs.copy() *10,
+                track.raceline.vxs.copy(),
                 track.raceline.ks.copy(),
             ]
         self.config = config
@@ -177,10 +177,10 @@ class NMPCPlanner:
         ref_traj[1, :] = cy[ind_list]
         ref_traj[3, :] = sp[ind_list]
         cyaw[cyaw - state["pose_theta"] > 4.5] = np.abs(
-            cyaw[cyaw - state["pose_theta"] > 4.5] - (2 * np.pi)
+            cyaw[cyaw - state["pose_theta"] > 4.5] #- (2 * np.pi)
         )
         cyaw[cyaw - state["pose_theta"] < -4.5] = np.abs(
-            cyaw[cyaw - state["pose_theta"] < -4.5] + (2 * np.pi)
+            cyaw[cyaw - state["pose_theta"] < -4.5] #+ (2 * np.pi)
         )
         ref_traj[4, :] = cyaw[ind_list]
 
@@ -391,7 +391,7 @@ class NMPCPlanner:
 
         return self.oa[0], self.odelta_v[0]
 
-    def plan(self, current_state):
+    def plan(self, current_state, mu = None):
         """
         Plan a trajectory using the NMPC controller.
 
@@ -415,7 +415,8 @@ class NMPCPlanner:
             self.waypoints[3],
             self.waypoints[4],
         )
-        mu = 0.7
+        if mu is None:
+            mu = 0.7
 
         # Goal state is the last point's velocity and all zeros for the other states (s, ey, delta, vx, vy, wz, epsi, curv)
         goal_state = ca.vertcat(
