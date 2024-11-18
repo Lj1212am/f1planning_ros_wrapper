@@ -7,7 +7,7 @@ import sys
 import math
 import os
 
-sys.path.append('/home/lee/work/f1-fifth/src/f1planning_ros_wrapper/f1tenth_planning')
+sys.path.append('/home/nvidia/f1-fifth/src/f1planning_ros_wrapper/f1tenth_planning')
 
 #NMPC Imports
 from dataclasses import dataclass, field
@@ -31,10 +31,10 @@ class NMPCPlannerNode(Node):
     def __init__(self):
         super().__init__('nmpc_planner_node')
         
-        self.real_car = False
-        self.config_path = "/home/lee/work/f1-fifth/src/trajectory_csv/"
+        self.real_car = True
+        self.config_path = "/home/nvidia/f1-fifth/src/trajectory_csv"
         
-        self.csv = "interpolated_trajectory_3_5.csv"
+        self.csv = "interpolated_trajectory_2.csv"
         self.map_name = os.path.join(self.config_path, self.csv)
         self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
         
@@ -57,21 +57,31 @@ class NMPCPlannerNode(Node):
         
         drive_topic = '/drive'
         if self.real_car:
-            odom_topic = '/pf/viz/inferred_pose'
+            odom_topic = '/transformed/odometry'
+            # odom_topic = '/gnss_to_local/odometry'
         else:
             odom_topic = '/ego_racecar/odom'
+
+        self.initial_x = None
+        self.initial_y = None
         
-        
+        if self.real_car:
+            self.initial_x = 0.0 #1118.0
+            self.initial_y = 0.0 #946.1487523074607
+
         # ackermann_sub = message_filters.Subscriber(self, AckermannDriveStamped, drive_topic)
         # odom_sub = message_filters.Subscriber(self, Odometry, odom_topic)
         
         # self.ts = message_filters.ApproximateTimeSynchronizer([ackermann_sub, odom_sub], 1, 0.1)
         # self.ts.registerCallback(self.state_callback)
-        
+
         self.sub_odom = self.create_subscription(Odometry, odom_topic, self.state_callback, 1)
+        
+        
+        # self.sub_odom = self.create_subscription(Odometry, odom_topic, self.state_callback, 1)
         self.sub_ackermann = self.create_subscription(AckermannDriveStamped, drive_topic, self.ackerman_callback, 1)
         self.pub_drive = self.create_publisher(AckermannDriveStamped, drive_topic, 1)
-        self.pub_mpc_sol = self.create_publisher(Marker, 'mpc_solution', 10)
+        # self.pub_mpc_sol = self.create_publisher(Marker, 'mpc_solution', 10)
         self.sub_mu = self.create_subscription(Float32, 'friction_value', self.friction_callback, 10) 
         # Publisher for visualizing waypoints as MarkerArray
         
@@ -171,6 +181,13 @@ class NMPCPlannerNode(Node):
     def publish_control(self):
         
         pass
+
+    def gnss_callback(self, nav_msg):
+        self.gnss_vel_x = -nav_msg.twist.twist.linear.x
+        self.gnss_vel_y = -nav_msg.twist.twist.linear.y
+
+        print("gnss speed: ", self.gnss_speed, "drive topic speed: ", self.drive_msg.drive.speed)
+
         
     
     # def state_callback(self, ackerman_msg, odom_msg):
@@ -178,16 +195,30 @@ class NMPCPlannerNode(Node):
         """
         Callback for Odometry updates, processes the current pose and sends it to the NMPC planner.
         """
-        # steering_angle = ackerman_msg.drive.steering_angle
-        # Extract the pose from the Odometry message
-        position = odom_msg.pose.pose.position
-        orientation = odom_msg.pose.pose.orientation
+        if self.real_car:
+            position = odom_msg.pose.pose.position
+            position.x = position.x - self.initial_x
+            position.y = position.y - self.initial_y
+            curr_quat = odom_msg.pose.pose.orientation
+            yaw = math.atan2(2 * (curr_quat.w * curr_quat.z + curr_quat.x * curr_quat.y),
+                              1 - 2 * (curr_quat.y ** 2 + curr_quat.z ** 2))
+            yaw += math.pi
+            linear_vel_x = -1 *odom_msg.twist.twist.linear.x
+            linear_vel_y = -1 * odom_msg.twist.twist.linear.y # Tomorrow we will fix here
+        else:
+            # steering_angle = ackerman_msg.drive.steering_angle
+            # Extract the pose from the Odometry message
+            position = odom_msg.pose.pose.position
+
+            orientation = odom_msg.pose.pose.orientation
         
-        linear_vel_x = odom_msg.twist.twist.linear.x
-        linear_vel_y = odom_msg.twist.twist.linear.y
+            linear_vel_x = odom_msg.twist.twist.linear.x
+            linear_vel_y = odom_msg.twist.twist.linear.y
 
         # Convert quaternion to Euler angles for yaw
-        yaw = self.quaternion_to_euler(orientation)
+            yaw = self.quaternion_to_euler(orientation)
+
+
         yaw_rate = odom_msg.twist.twist.angular.z
         # if yaw_rate < 2.0:
         #     yaw_rate = 0.0
@@ -213,24 +244,26 @@ class NMPCPlannerNode(Node):
         
         accl = 0.0
         steerv = 0.0
-        # if linear velocity < 1 set it greater than 1 else accel is 9 and steerv is 0
-        if linear_vel_x < 0.1:
-            accl = 9.0
-            steerv = 1.0
-        else:
-            # Plan using the NMPC planner
-            print('abt to plan so hard')
-            try:
-                accl, steerv = self.planner.plan(state_dict, self.mu)
-                print('done planning')
-                self.render_mpc_sol()
-            except Exception as e:
-                print('error planning', e)
+        # # if linear velocity < 1 set it greater than 1 else accel is 9 and steerv is 0
+        # if linear_vel_x < 0.1 and not self.real_car:
+        #     accl = 9.0
+        #     steerv = 1.0
+        # else:
+        # Plan using the NMPC planner
+        print('abt to plan so hard')
+        
+        try:
+            accl, steerv = self.planner.plan(state_dict, self.mu)
+            print('done planning')
+            # self.render_mpc_sol()
+        except Exception as e:
+            print('error planning', e)
                 
             
         
         # integrate steerv to get steering angle and integrate accl to get speed us dt =0.1
         dt = self.planner.config.DTK
+        print('dt', dt)
         self.steering_angle = self.steering_angle + steerv * dt
         linear_vel_x = linear_vel_x + accl * dt
         self.speed = linear_vel_x

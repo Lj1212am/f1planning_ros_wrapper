@@ -32,7 +32,11 @@ import gymnasium as gym
 from f110_gym.envs import F110Env
 import time
 
-from f1tenth_planning.control.kinematic_mpc.kinematic_mpc import KMPCPlanner
+import sys
+
+sys.path.append('/home/nvidia/f1-fifth/src/f1planning_ros_wrapper/f1tenth_planning')
+
+from f1tenth_planning.control.kinematic_mpc.kinematic_mpc import KMPCPlanner, mpc_config
 
 
 def main():
@@ -43,18 +47,20 @@ def main():
 
     # create environment
     env: F110Env = gym.make(
-        "f110_gym:f110-v0",
+        "f1tenth_gym:f1tenth-v0",
         config={
-            "map": "Spielberg",
+            "map": "Spielberg_blank",
             "num_agents": 1,
             "control_input": "accl",
-            "observation_config": {"type": "dynamic_state"},
+            "observation_config": {"type": "original"},
         },
         render_mode="human",
     )
 
     # create planner
-    planner = KMPCPlanner(track=env.track, debug=False)
+    config = mpc_config()
+    config.WB = 0.531
+    planner = KMPCPlanner(track=env.track, config=config, debug=False)
     planner.config.dlk = (
         env.track.raceline.ss[1] - env.track.raceline.ss[0]
     )  # waypoint spacing
@@ -78,8 +84,31 @@ def main():
 
     laptime = 0.0
     start = time.time()
+
+    ego_obs = dict()
+    print('dict of state', obs.keys())
+    ego_obs["pose_x"] = obs["poses_x"][0]
+    ego_obs["pose_y"] = obs["poses_y"][0]
+    ego_obs["pose_theta"] = obs["poses_theta"][0]
+    ego_obs["linear_vel_x"] = obs["linear_vels_x"][0]
+    ego_obs["linear_vel_y"] = obs["linear_vels_y"][0]
+    ego_obs["ang_vel_z"] = obs["ang_vels_z"][0]
+    ego_obs["delta"] = 0.0 # Starts with 0, then updates from the steerv 
+    ego_obs["beta"] = np.arctan2(ego_obs["linear_vel_y"], ego_obs["linear_vel_x"])
+    accl, steerv = 0.0, 0.0
+
     while not done:
-        steerv, accl = planner.plan(obs["agent_0"])
+
+        ego_obs["pose_x"] = obs["poses_x"][0]
+        ego_obs["pose_y"] = obs["poses_y"][0]
+        ego_obs["pose_theta"] = obs["poses_theta"][0]
+        ego_obs["linear_vel_x"] = obs["linear_vels_x"][0]
+        ego_obs["linear_vel_y"] = obs["linear_vels_y"][0]
+        ego_obs["ang_vel_z"] = obs["ang_vels_z"][0]
+        ego_obs["delta"] = ego_obs["delta"] + steerv * env.unwrapped.timestep
+        ego_obs["beta"] = np.arctan2(ego_obs["linear_vel_y"], ego_obs["linear_vel_x"])
+        
+        steerv, accl = planner.plan(ego_obs)
         obs, timestep, terminated, truncated, infos = env.step(
             np.array([[steerv, accl]])
         )
@@ -89,7 +118,7 @@ def main():
 
         print(
             "speed: {}, steer vel: {}, accl: {}".format(
-                obs["agent_0"]["linear_vel_x"], steerv, accl
+                ego_obs["linear_vel_x"], steerv, accl
             )
         )
 

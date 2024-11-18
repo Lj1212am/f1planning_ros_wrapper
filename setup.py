@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'nmpc_ros_node = f1planning_ros_wrapper.nmpc_ros_wrapper:main',
+            'kin_mpc_node = f1planning_ros_wrapper.kin_mpc_wrapper:main',
         ],
     },
 )

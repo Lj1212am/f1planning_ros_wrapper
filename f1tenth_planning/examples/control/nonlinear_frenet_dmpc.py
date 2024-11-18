@@ -36,7 +36,7 @@ def main():
 
     env.unwrapped.add_render_callback(planner.render_waypoints)
     env.unwrapped.add_render_callback(planner.render_local_plan)
-    env.unwrapped.add_render_callback(planner.render_mpc_sol)
+    # env.unwrapped.add_render_callback(planner.render_mpc_sol)
 
     # reset environment
     poses = np.array(

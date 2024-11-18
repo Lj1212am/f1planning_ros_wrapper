@@ -13,21 +13,23 @@ import casadi as ca
 class mpc_config:
     NXK: int = 7  # length of dynamic state vector: z = [s, ey, delta, vx, vy, wz, eyaw]
     NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
-    TK: int = 5  # finite time horizon length
+    TK: int = 16  # finite time horizon length
     Rk: list = field(
-        default_factory=lambda: np.diag([0.01, 1.0])
+        default_factory=lambda: np.diag([0.01, 2.0])
     )  # input cost matrix, penalty for inputs - [accel, steering_speed]
     Rdk: list = field(
-        default_factory=lambda: np.diag([0.01, 1.0])
+        default_factory=lambda: np.diag([0.01, 2.0])
     )  # input difference cost matrix, penalty for change of inputs - [accel, steering_speed]
     Qk: list = field(
-        default_factory=lambda: np.diag([0.0, 25.0, 0.0, 5.0, 5.0, 0.0, 15.0])
+        default_factory=lambda: np.diag([0.0, 25.0, 0.0, 5.0, 5.0, 0.0, 35.0])
     )  # state error cost matrix, for the the next (T) prediction time steps [s, ey, delta, vx, vy, wz, eyaw]
     Qfk: list = field(
-        default_factory=lambda: np.diag([0.0, 25.0, 0.0, 5.0, 5.0, 0.0, 15.0])
+        default_factory=lambda: np.diag([0.0, 25.0, 0.0, 5.0, 5.0, 0.0, 35.0])
     )  # final state error matrix, penalty  for the final state constraints: [s, ey, delta, vx, vy, wz, eyaw]
+
+
     N_IND_SEARCH: int = 20  # Search index number
-    DTK: float = 0.1  # time step [s] kinematic
+    DTK: float = 0.05  # time step [s] kinematic
     dlk: float = 0.03  # dist step [m] kinematic
     MIN_STEER: float = -0.4189  # maximum steering angle [rad]
     MAX_STEER: float = 0.4189  # maximum steering angle [rad]
@@ -312,9 +314,9 @@ class NMPCPlanner:
         ipopt_opts = {
             "ipopt": {
                 "print_level": 1,
-                "max_iter": 200,
-                "acceptable_tol": 1e-8,
-                "acceptable_obj_change_tol": 1e-6,
+                "max_iter": 50,
+                "acceptable_tol": 1e-6,
+                "acceptable_obj_change_tol": 1e-4,
                 "warm_start_init_point": "yes",
             },
             "print_time": 0,
@@ -384,10 +386,10 @@ class NMPCPlanner:
         self.ox = x_sol[0, :].flatten()
         self.oy = x_sol[1, :].flatten()
         # TODO convert back to cartesian
-        for i, (s, ey) in enumerate(zip(self.ox, self.oy)):
-            curr_x, curr_y, _ = self.track.frenet_to_cartesian(s, ey, 0.0, use_raceline=True)
-            self.ox[i] = curr_x
-            self.oy[i] = curr_y
+        # for i, (s, ey) in enumerate(zip(self.ox, self.oy)):
+        #     curr_x, curr_y, _ = self.track.frenet_to_cartesian(s, ey, 0.0, use_raceline=True)
+        #     self.ox[i] = curr_x
+        #     self.oy[i] = curr_y
 
         return self.oa[0], self.odelta_v[0]
 
