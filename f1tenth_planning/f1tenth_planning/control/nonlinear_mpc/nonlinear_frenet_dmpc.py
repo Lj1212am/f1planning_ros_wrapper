@@ -15,16 +15,16 @@ class mpc_config:
     NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
     TK: int = 5  # finite time horizon length
     Rk: list = field(
-        default_factory=lambda: np.diag([0.01, 1.0])
+        default_factory=lambda: np.diag([1.1, 0.1])
     )  # input cost matrix, penalty for inputs - [accel, steering_speed]
     Rdk: list = field(
-        default_factory=lambda: np.diag([0.01, 1.0])
+        default_factory=lambda: np.diag([1.1, 0.1])
     )  # input difference cost matrix, penalty for change of inputs - [accel, steering_speed]
     Qk: list = field(
-        default_factory=lambda: np.diag([0.0, 65.0, 0.0, 0.5, 5.0, 0.0, 15.0])
+        default_factory=lambda: np.diag([0.0, 65.0, 0.0, 10.5, 5.0, 0.0, 185.0])
     )  # state error cost matrix, for the the next (T) prediction time steps [s, ey, delta, vx, vy, wz, eyaw]
     Qfk: list = field(
-        default_factory=lambda: np.diag([0.0, 65.0, 0.0, 0.5, 5.0, 0.0, 15.0])
+        default_factory=lambda: np.diag([0.0, 65.0, 0.0, 10.5, 5.0, 0.0, 185.0])
     )  # final state error matrix, penalty  for the final state constraints: [s, ey, delta, vx, vy, wz, eyaw]
     N_IND_SEARCH: int = 20  # Search index number
     DTK: float = 0.1  # time step [s] kinematic
@@ -33,10 +33,10 @@ class mpc_config:
     MAX_STEER: float = 0.4189  # maximum steering angle [rad]
     MIN_DSTEER: float = -np.deg2rad(180.0)  # maximum steering speed [rad/s]
     MAX_DSTEER: float = np.deg2rad(180.0)  # maximum steering speed [rad/s]
-    MAX_SPEED: float = 10.0  # maximum speed [m/s]
+    MAX_SPEED: float = 3.0  # maximum speed [m/s]
     MIN_SPEED: float = 0.0  # minimum backward speed [m/s]
     MAX_ACCEL: float = 9.51  # maximum acceleration [m/ss]
-    MIN_ACCEL: float = -9.51  # minimum acceleration [m/ss]
+    MIN_ACCEL: float = 0.0 #-9.51  # minimum acceleration [m/ss]
     V_SWITCH: float = 1.0  # switching velocity from kinematic to dynamic [m/s]
 
     # Vehicle parameters
@@ -81,7 +81,7 @@ class NMPCPlanner:
                 track.raceline.xs.copy(),
                 track.raceline.ys.copy(),
                 track.raceline.yaws.copy(),
-                track.raceline.vxs.copy() *10,
+                track.raceline.vxs.copy(),
                 track.raceline.ks.copy(),
             ]
         self.config = config
