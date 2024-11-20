@@ -71,6 +71,7 @@ class NMPCPlannerNode(Node):
             GearCommand, '/control/command/gear_cmd', gear_qos_profile)
         self.marker_pub = self.create_publisher(
             MarkerArray, 'waypoints_markers', qos_profile)
+        self.sub_mu = self.create_subscription(Float32, 'friction_value', self.friction_callback, 10) 
         # Create a timer for planning (adjust the rate as needed)
         self.timer = self.create_timer(0.1, self.publish_control)
         # Initialize the NMPCPlanner with default parameters
@@ -87,6 +88,7 @@ class NMPCPlannerNode(Node):
         # Initialize control variables
         self.steering_angle = 0.0
         self.speed = 0.0
+        self.mu = None
         # Publish the gear command to set the vehicle in drive mode
         gear_cmd = GearCommand()
         gear_cmd.stamp = self.get_clock().now().to_msg()
@@ -99,6 +101,7 @@ class NMPCPlannerNode(Node):
         #     self.get_logger().info('Service not available, waiting again...')
         # Switch to autonomous mode
         self.switch_to_autonomous_mode()
+
     def switch_to_autonomous_mode(self):
         # Create the request
         request = ControlModeCommand.Request()
@@ -114,15 +117,22 @@ class NMPCPlannerNode(Node):
                 self.get_logger().warn('Failed to switch to autonomous mode.')
         else:
             self.get_logger().error('Service call failed or returned None.')
+    
+    def friction_callback(self, mu_msg):
+        self.mu = float(mu_msg.data)
+    
     def ackerman_callback(self, ackerman_msg):
         # Update the steering angle from the received message
         self.steering_angle = ackerman_msg.lateral.steering_tire_angle
+    
     def render_mpc_sol(self):
         # Implement visualization of MPC solution if needed
         pass
+    
     def publish_control(self):
         # Implement control publishing logic if needed
         pass
+    
     def state_callback(self, odom_msg):
         # Extract the pose from the Odometry message
         position = odom_msg.pose.pose.position
@@ -152,7 +162,7 @@ class NMPCPlannerNode(Node):
         steerv = 0.0
         # Plan using the NMPC planner
         try:
-            accl, steerv = self.planner.plan(state_dict)
+            accl, steerv = self.planner.plan(state_dict, self.mu)
             self.render_mpc_sol()
         except Exception as e:
             self.get_logger().error(f'Error in planning: {e}')
@@ -223,6 +233,7 @@ class NMPCPlannerNode(Node):
             marker_array.markers.append(marker)
         # Publish the MarkerArray
         self.marker_pub.publish(marker_array)
+    
     def quaternion_to_euler(self, orientation):
         """
         Convert quaternion (from Odometry) to yaw (Euler angle).
@@ -236,8 +247,10 @@ class NMPCPlannerNode(Node):
         cosy_cosp = 1 - 2 * (y * y + z * z)
         yaw = np.arctan2(siny_cosp, cosy_cosp)
         return yaw
+    
     def yaw_to_quaternion(self, yaw):
         """ Convert yaw angle to a quaternion (x, y, z, w) """
+    
         return [0.0, 0.0, np.sin(yaw / 2), np.cos(yaw / 2)]
 def main(args=None):
     rclpy.init(args=args)
