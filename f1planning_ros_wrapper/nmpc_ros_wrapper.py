@@ -1,3 +1,5 @@
+import signal
+import time
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, Float32
@@ -24,13 +26,20 @@ from ackermann_msgs.msg import AckermannDriveStamped
 from geometry_msgs.msg import PoseWithCovarianceStamped, Point
 import message_filters
 from visualization_msgs.msg import MarkerArray, Marker
+from PyQt5.QtWidgets import QApplication
+from pyqtgraph.Qt import QtCore
+import pyqtgraph as pg
+import threading
+import matplotlib.pyplot as plt
+from matplotlib import cm, colormaps
+from matplotlib.colors import Normalize
 
 # from 0 - 1000
 waypoint_num = 1000
 class NMPCPlannerNode(Node):
     def __init__(self):
         super().__init__('nmpc_planner_node')
-        
+        self.plot = False
         self.real_car = True
         self.config_path = "/home/nvidia/f1-fifth/src/trajectory_csv"
         
@@ -57,17 +66,17 @@ class NMPCPlannerNode(Node):
         
         drive_topic = '/drive'
         if self.real_car:
-            odom_topic = '/transformed/odometry'
-            # odom_topic = '/gnss_to_local/odometry'
+            # odom_topic = '/transformed/odometry'
+            odom_topic = '/gnss_to_local/odometry'
         else:
             odom_topic = '/ego_racecar/odom'
 
         self.initial_x = None
         self.initial_y = None
         
-        if self.real_car:
-            self.initial_x = 0.0 #1118.0
-            self.initial_y = 0.0 #946.1487523074607
+        # if self.real_car:
+        #     self.initial_x = 0.0 #1118.0
+        #     self.initial_y = 0.0 #946.1487523074607
 
         # ackermann_sub = message_filters.Subscriber(self, AckermannDriveStamped, drive_topic)
         # odom_sub = message_filters.Subscriber(self, Odometry, odom_topic)
@@ -88,15 +97,14 @@ class NMPCPlannerNode(Node):
         self.marker_pub = self.create_publisher(MarkerArray, 'waypoints_markers', 10)
         
         #Create a timer publisher for planning
-        self.timer = self.create_timer(0.1, self.publish_control)
-        
+        # self.timer = self.create_timer(0.1, self.publish_control)
         
         # Initialize the NMPCPlanner with default parameters
         print('setting config')
         self.config = mpc_config()
         print('initing controlller')
         self.planner = NMPCPlanner(track = self.track, config=self.config, debug=False)
-        print('finished initing controller')
+        
         
         waypointx = self.track.raceline.xs[:waypoint_num]
         waypointy = self.track.raceline.ys[:waypoint_num]
@@ -104,8 +112,13 @@ class NMPCPlannerNode(Node):
         self.waypoints = np.column_stack((waypointx, waypointy, waypointyaw))
         
         ##setup a timer callpacl to publish waypoints as markers
-        self.timer = self.create_timer(0.1, self.publish_waypoints_as_markers)
-        # self.publish_waypoints_as_markers(self.waypoints)
+        # self.timer = self.create_timer(0.1, self.publish_waypoints_as_markers)
+        
+        #sleep for 1 second to allow the publisher to publish waypoints
+        time.sleep(1)
+        self.publish_waypoints_as_markers(self.waypoints)
+        
+
         
         self.old_steerv = 0.0
         self.old_accl = 0.0
@@ -118,14 +131,56 @@ class NMPCPlannerNode(Node):
         self.steering_angle = 0.0
         self.speed = 0.0
         self.mu = None
-        
-        # drive = AckermannDriveStamped()
-        # # drive.drive.steering_angle = 0.3
-        # drive.drive.speed = 1.0
-        # for i in range(10):
-        #     self.pub_drive.publish(drive)
-        # self.pub_drive.publish(drive)
-    
+
+
+        if self.plot:
+           
+            # Initialize PyQtGraph
+            pg.setConfigOption('background', 'w')
+            pg.setConfigOption('foreground', 'k')
+            
+            # self.app = QApplication([])  # Ensure QApplication is created in the main thread
+            print('finished initing pqt')
+            self.win = pg.GraphicsLayoutWidget(show=True, title="NMPC Position Tracking")
+            self.plot = self.win.addPlot(title="Trajectory and Waypoints")
+            self.plot.enableAutoRange('xy', True)
+            self.plot.setAspectLocked(True)
+           
+
+
+            self.waypoints_plot = pg.ScatterPlotItem(size=5, brush=pg.mkBrush(0, 0, 255), name="Waypoints")
+            self.trajectory_plot = pg.PlotCurveItem(pen=pg.mkPen('r', width=2), name="Trajectory")
+            self.current_location_plot = pg.ScatterPlotItem(size=10, brush=pg.mkBrush(0, 255, 0), name="Current Location")
+            self.predict_traj_plot = pg.PlotCurveItem(pen=pg.mkPen('b', style=QtCore.Qt.DashLine, width=1.5), name="Predicted Trajectory")
+            
+            self.plot.addItem(self.waypoints_plot)
+            self.plot.addItem(self.trajectory_plot)
+            self.plot.addItem(self.current_location_plot)
+            self.plot.addItem(self.predict_traj_plot)
+
+            self.waypoints_plot.setData([{'pos': (wp[1], wp[2]), 'data': 1} for wp in self.waypoints])
+            self.points = []
+            self.current_point = []
+
+            self.update_timer = QtCore.QTimer()
+            self.update_timer.timeout.connect(self.update_plot)
+            self.update_timer.start(50)
+
+            self.legend = self.plot.addLegend()
+            self.legend.addItem(self.waypoints_plot, 'Waypoints')
+            self.legend.addItem(self.trajectory_plot, 'Trajectory')
+            self.legend.addItem(self.current_location_plot, 'Current Position')
+            # Add predicted and reference trajectories to the legend
+            self.legend.addItem(self.predict_traj_plot, 'Predicted Trajectory')
+        print('finished initing controller')
+
+    def update_plot(self):
+        if self.points:
+            points_array = np.array(self.points)
+            self.trajectory_plot.setData(points_array[:, 0], points_array[:, 1])
+        if self.current_point:
+            self.current_location_plot.setData([{'pos': self.current_point[0], 'data': 1}])
+
     def ackerman_callback(self, ackerman_msg):
         self.steering_angle = ackerman_msg.drive.steering_angle
         
@@ -144,39 +199,10 @@ class NMPCPlannerNode(Node):
         ref_traj_yaw = ref_traj_frenet[4,:]
        
         ref_waypoints = np.column_stack((ref_traj_x, ref_traj_y, ref_traj_yaw))
+        self.ref_traj_plot.setData(ref_traj_x, ref_traj_y)
         
-        self.publish_waypoints_as_markers(ref_waypoints, False)
-        
-        
-        # if self.planner.ox is not None and self.planner.oy is not None:
-        #                # Create a new marker
-        #     marker = Marker()
-        #     marker.header.frame_id = "map"  # Adjust this to match your RViz frame
-        #     marker.header.stamp = self.get_clock().now().to_msg()
-        #     marker.ns = "mpc_solution"
-        #     marker.id = 0
-        #     marker.type = Marker.ARROW  # Render as a line connecting the points
-        #     marker.action = Marker.ADD
-        #     marker.scale.x = 1.1  # Line width
-        #     marker.scale.y = 1.1  # Line width
-        #     marker.scale.z = 1.1  # Line width
-        #     marker.color.a = 1.0  # Alpha (transparency)
-        #     marker.color.r = 0.0
-        #     marker.color.g = 0.0
-        #     marker.color.b = 1.0  # Blue color
+        # self.publish_waypoints_as_markers(ref_waypoints, False)
 
-        #        # Set the positions of the start and end points
-        #     start = Point()
-                            
-        #     quaternion = self.yaw_to_quaternion(psi)
-        #     marker.pose.orientation.x = quaternion[0]
-        #     marker.pose.orientation.y = quaternion[1]
-        #     marker.pose.orientation.z = quaternion[2]
-        #     marker.pose.orientation.w = quaternion[3]
-            
-
-        #     # Publish the marker to render in RViz
-        #     self.pub_mpc_sol.publish(marker)
     
     def publish_control(self):
         
@@ -195,10 +221,18 @@ class NMPCPlannerNode(Node):
         """
         Callback for Odometry updates, processes the current pose and sends it to the NMPC planner.
         """
+
+        print('state callback')
         if self.real_car:
+            if self.initial_x==None or self.initial_y==None:
+                self.initial_x = odom_msg.pose.pose.position.x
+                self.initial_y = odom_msg.pose.pose.position.y
+                print(f"Initial pose on real car: {self.initial_x}, {self.initial_y}")
+            
             position = odom_msg.pose.pose.position
             position.x = position.x - self.initial_x
             position.y = position.y - self.initial_y
+            
             curr_quat = odom_msg.pose.pose.orientation
             yaw = math.atan2(2 * (curr_quat.w * curr_quat.z + curr_quat.x * curr_quat.y),
                               1 - 2 * (curr_quat.y ** 2 + curr_quat.z ** 2))
@@ -277,6 +311,16 @@ class NMPCPlannerNode(Node):
         # if linear_vel_x < 0.1:
         self.pub_drive.publish(drive_msg)
 
+        # Visualization logic
+        if self.plot:
+            # Append current car position to trajectory points
+            self.points.append((position.x, position.y))
+
+            # Update real trajectory
+            points_array = np.array(self.points)
+            self.trajectory_plot.setData(points_array[:, 0], points_array[:, 1])
+
+            
         
         
     
@@ -360,12 +404,35 @@ class NMPCPlannerNode(Node):
         """ Convert yaw angle to a quaternion (x, y, z, w) """
         return [0.0, 0.0, np.sin(yaw / 2), np.cos(yaw / 2)]
 
+
 def main(args=None):
     rclpy.init(args=args)
-    node = NMPCPlannerNode()
-    rclpy.spin(node)
-    node.destroy_node()
+
+    nmpc_node = NMPCPlannerNode()
+
+    if nmpc_node.plot:
+        # Handle Ctrl+C for clean shutdown
+        def handle_interrupt(signal, frame):
+            print("Ctrl+C detected, shutting down...")
+            QApplication.instance().quit()
+            rclpy.shutdown()
+
+        signal.signal(signal.SIGINT, handle_interrupt)
+
+        # Start ROS spinning in a separate thread
+        executor_thread = threading.Thread(target=rclpy.spin, args=(nmpc_node,), daemon=True)
+        executor_thread.start()
+
+        QApplication.instance().exec_()
+    else:
+        rclpy.spin(nmpc_node)
+
+    # Clean up
+    nmpc_node.destroy_node()
     rclpy.shutdown()
+    if nmpc_node.plot:
+        executor_thread.join()
+
 
 if __name__ == '__main__':
     main()

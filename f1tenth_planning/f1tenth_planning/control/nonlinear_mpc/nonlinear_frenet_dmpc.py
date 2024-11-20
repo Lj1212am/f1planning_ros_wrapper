@@ -13,7 +13,7 @@ import casadi as ca
 class mpc_config:
     NXK: int = 7  # length of dynamic state vector: z = [s, ey, delta, vx, vy, wz, eyaw]
     NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
-    TK: int = 16  # finite time horizon length
+    TK: int = 8  # finite time horizon length
     Rk: list = field(
         default_factory=lambda: np.diag([0.01, 2.0])
     )  # input cost matrix, penalty for inputs - [accel, steering_speed]
@@ -29,7 +29,7 @@ class mpc_config:
 
 
     N_IND_SEARCH: int = 20  # Search index number
-    DTK: float = 0.05  # time step [s] kinematic
+    DTK: float = 0.1  # time step [s] kinematic
     dlk: float = 0.03  # dist step [m] kinematic
     MIN_STEER: float = -0.4189  # maximum steering angle [rad]
     MAX_STEER: float = 0.4189  # maximum steering angle [rad]
