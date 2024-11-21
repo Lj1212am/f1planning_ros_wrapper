@@ -303,21 +303,39 @@ def calculate_dynamic_yaw(cx, cy):
 class MPC(Node):
     def __init__(self):
         super().__init__('mpc_node')
-        self.plot = False
+        self.plot = True
 
-        self.real_car = True
+        self.real_car = False
         self.config_path = "/home/nvidia/f1-fifth/src/trajectory_csv"
         
-        self.csv = "interpolated_trajectory_3.csv"
+
+
+        # for trajectory csv files:
+        # self.csv = "interpolated_trajectory_3.csv"
+        self.csv = 'wp_20241120_172548.csv'
+        # self.csv = 'interpolated_wp.csv'
         self.map_name = os.path.join(self.config_path, self.csv)
         self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
 
 
-
+        self.waypoints = self.waypoints[:-50,:]
         self.waypoints[:, 3] += math.pi/2
         self.waypoints[:, 3] = np.unwrap(self.waypoints[:, 3])
         self.sin_yaw = np.sin(self.waypoints[:, 3])
         self.cos_yaw = np.cos(self.waypoints[:, 3])
+
+        # for waypoint csv files:
+        # waypoints = np.loadtxt(self.map_name, delimiter=',', skiprows=1) 
+
+        # waypoint_x = waypoints[:, 0]
+        # waypoint_y = waypoints[:, 1]
+        # waypoint_z = waypoints[:, 2]
+        # waypoint_v = waypoints[:, 3]
+        # self.waypoints = np.column_stack((np.ones(waypoint_x.shape), waypoint_x, waypoint_y, np.ones(waypoint_x.shape), np.ones(waypoint_x.shape), waypoint_v))
+
+
+        
+
         
         
 
