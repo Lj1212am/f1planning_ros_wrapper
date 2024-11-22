@@ -47,11 +47,11 @@ class mpc_config:
     BR = 1.0  # TODO
     DF = None  # friction force front, determined by mu and m post init
     DR = None  # friction force rear, determined by mu and m post init
-    LF: float = 0.2735  # distance from center of gravity to front axle
-    LR: float = 0.2585  # distance from center of gravity to rear axle
-    H: float = 0.1875  # height of center of gravity
-    M: float = 15.32  # mass of vehicle
-    I: float = 0.64332  # moment of inertia
+    LF: float = 0.665  # distance from center of gravity to front axle
+    LR: float = 0.44  # distance from center of gravity to rear axle
+    H: float = 0.2  # height of center of gravity
+    M: float = 1800.0  # mass of vehicle
+    I: float = 2400.0  # moment of inertia
 
     def __post_init__(self):
         self.DF = self.MU * self.M * 9.81 / 2.0
@@ -391,7 +391,7 @@ class NMPCPlanner:
 
         return self.oa[0], self.odelta_v[0]
 
-    def plan(self, current_state):
+    def plan(self, current_state, mu = None):
         """
         Plan a trajectory using the NMPC controller.
 
@@ -415,7 +415,9 @@ class NMPCPlanner:
             self.waypoints[3],
             self.waypoints[4],
         )
-        mu = 0.7
+
+        if mu is None:
+            mu = 0.7
 
         # Goal state is the last point's velocity and all zeros for the other states (s, ey, delta, vx, vy, wz, epsi, curv)
         goal_state = ca.vertcat(

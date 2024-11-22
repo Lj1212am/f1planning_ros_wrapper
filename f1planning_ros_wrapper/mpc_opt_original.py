@@ -193,7 +193,7 @@ class mpc_config:
     dlk: float = 0.03
     LENGTH: float = 0.9
     WIDTH: float = 0.54
-    WB: float = 0.53
+    WB: float = 1.105
     MIN_STEER: float = -0.4189
     MAX_STEER: float = 0.4189
     MAX_DSTEER: float = np.deg2rad(180.0)
@@ -362,7 +362,7 @@ def calculate_dynamic_yaw(cx, cy):
 class MPC(Node):
     def __init__(self):
         super().__init__('mpc_node')
-        self.plot = False
+        self.plot = True
 
         self.real_car = False
         self.config_path = "/home/rajnish/ros2_ws/src/trajectory_csv"
@@ -476,28 +476,6 @@ class MPC(Node):
     def pose_callback(self, pose_msg):
         vehicle_state = self.get_vehicle_state(pose_msg)
         ref_path = self.calc_ref_trajectory(vehicle_state, self.waypoints[:, 1], self.waypoints[:, 2], self.waypoints[:,3], self.waypoints[:, 5])
-        # ref_path = self.calc_ref_trajectory_dynamic_yaw(vehicle_state, self.waypoints[:, 1], self.waypoints[:, 2],  self.waypoints[:, 5])
-        
-        # ref_path = calc_ref_trajectory_jitted(vehicle_state.x, vehicle_state.y, vehicle_state.v, vehicle_state.yaw, 
-        #                                       self.config.NXK, self.config.TK, self.config.DTK, self.config.dlk, 
-        #                                       self.waypoints[:, 1], self.waypoints[:, 2], self.waypoints[:,3], self.waypoints[:, 5],
-        #                                       self.sin_yaw, self.cos_yaw)
-        # Check if the yaw error is greater than pi, if so make the reference have the same sign as the state at those points
-        # yaw_error = ref_path[3, :] - vehicle_state.yaw
-        # # print(ref_path[3, :])
-        # print("STATE YAW:", vehicle_state.yaw)
-        # # Adjust the yaw error to be within the range [-pi, pi] using arctan
-        # yaw_error = np.arctan2(np.sin(yaw_error), np.cos(yaw_error))
-        # print("error:", yaw_error)
-        # ref_path[3, :] = vehicle_state.yaw + yaw_error
-        # print("reference:", ref_path[3, :])
-        # ref_path[3, :] = np.arctan2(np.sin(ref_path[3, :]), np.cos(ref_path[3, :]))
-
-        # ref_path = transform_ref_traj_to_local_frame(ref_path, vehicle_state.x, vehicle_state.y, vehicle_state.yaw)
-        # print(f"Current Yaw: {vehicle_state.yaw}")
-        # print(ref_path[3,:])
-        # print("-------------------------")
-
         
         ref_path_local = transform_ref_traj_to_local_frame(ref_path, vehicle_state.x, vehicle_state.y, vehicle_state.yaw)
         
@@ -518,12 +496,26 @@ class MPC(Node):
         gear_cmd.command = GearCommand.DRIVE
         self.pub_gear.publish(gear_cmd)
         #publishing drive command
-        self.drive_msg.stamp = self.get_clock().now().to_msg()
-        #check config for the drive_cmd, if needed
-        self.drive_msg.lateral.stamp = self.drive_msg.stamp
-        self.drive_msg.lateral.steering_tire_angle = self.odelta_v[0]
-        self.drive_msg.lateral.acceleration = self.oa[0]
-        self.pub_drive.publish(self.drive_msg)
+        # self.drive_msg.stamp = self.get_clock().now().to_msg()
+        # #check config for the drive_cmd, if needed
+        # self.drive_msg.lateral.stamp = self.drive_msg.stamp
+        # self.drive_msg.lateral.steering_tire_angle = self.odelta_v[0]
+        # self.drive_msg.lateral.acceleration = self.oa[0]
+
+        drive_msg = AckermannControlCommand()
+        drive_msg.stamp = self.get_clock().now().to_msg()
+        # Set the lateral command
+        drive_msg.lateral.stamp = drive_msg.stamp
+        drive_msg.lateral.steering_tire_angle = self.odelta_v[0]
+        drive_msg.lateral.steering_tire_rotation_rate = 0.0  # Set as appropriate
+        # Set the longitudinal command
+        drive_msg.longitudinal.stamp = drive_msg.stamp
+        drive_msg.longitudinal.speed = ov[0]
+        drive_msg.longitudinal.acceleration = self.oa[0]
+  # Set as appropriate
+        drive_msg.longitudinal.jerk = 0.0  # Set as appropriate
+
+        self.pub_drive.publish(drive_msg)
 
         if self.plot:
             # Append current car position to trajectory points
@@ -556,56 +548,36 @@ class MPC(Node):
         print("gnss speed: ", self.gnss_speed, "drive topic speed: ", self.drive_msg.drive.speed)
 
     def get_vehicle_state(self, pose_msg):
-        ##use status sensors
         vehicle_state = State()
-        position = pose_msg.pose.pose.position
-        orientation = pose_msg.pose.pose.orientation
-        vel_x = pose_msg.twist.twist.linear.x
-        vel_y = pose_msg.twist.twist.linear.y
-        vehicle_state.v = np.sqrt(vel_x**2 + vel_y**2)
-        # Convert quaternion to Euler angles for yaw
-        vehicle_state.yaw = self.quaternion_to_euler(orientation)
-        vehicle_state.yaw_rate = pose_msg.twist.twist.angular.z
-        # Slip angle = arctan(vy / vx)
-        if linear_vel_x != 0:  # Avoid division by zero
-            slip_angle = math.atan2(vel_y, vel_x)
+
+        if self.real_car:
+            if self.initial_x==None or self.initial_y==None:
+                self.initial_x = pose_msg.pose.pose.position.x
+                self.initial_y = pose_msg.pose.pose.position.y
+                print(f"Initial pose on real car: {self.initial_x}, {self.initial_y}")
+            vehicle_state.x = (pose_msg.pose.pose.position.x - self.initial_x)
+            vehicle_state.y = (pose_msg.pose.pose.position.y - self.initial_y)
+            curr_quat = pose_msg.pose.pose.orientation
+            vehicle_state.yaw = math.atan2(2 * (curr_quat.w * curr_quat.z + curr_quat.x * curr_quat.y),
+                              1 - 2 * (curr_quat.y ** 2 + curr_quat.z ** 2))
+            vehicle_state.yaw += math.pi
+            # vehicle_state.yaw = np.arctan2(np.sin(vehicle_state.yaw), np.cos(vehicle_state.yaw))
+            vehicle_state.v = self.gnss_speed
         else:
-            linear_vel_x = 1.0
-            slip_angle = 0.0
-        vehicle_state.x = position.x
-        vehicle_state.y = position.y
-        vehicle_state.delta = self.odelta_v[0]
-        vehicle_state.beta = slip_angle
-        # if self.real_car:
-        #     if self.initial_x==None or self.initial_y==None:
-        #         self.initial_x = pose_msg.pose.pose.position.x
-        #         self.initial_y = pose_msg.pose.pose.position.y
-        #         print(f"Initial pose on real car: {self.initial_x}, {self.initial_y}")
-        #     vehicle_state.x = (pose_msg.pose.pose.position.x - self.initial_x)
-        #     vehicle_state.y = (pose_msg.pose.pose.position.y - self.initial_y)
-        #     curr_quat = pose_msg.pose.pose.orientation
-        #     vehicle_state.yaw = math.atan2(2 * (curr_quat.w * curr_quat.z + curr_quat.x * curr_quat.y),
-        #                       1 - 2 * (curr_quat.y ** 2 + curr_quat.z ** 2))
-        #     vehicle_state.yaw += math.pi
-        #     # vehicle_state.yaw = np.arctan2(np.sin(vehicle_state.yaw), np.cos(vehicle_state.yaw))
-        #     vehicle_state.v = self.gnss_speed
-        # else:
-        #     if self.initial_x==None or self.initial_y==None:
-        #         self.initial_x = pose_msg.pose.pose.position.x
-        #         self.initial_y = pose_msg.pose.pose.position.y
-        #         print(f"Initial pose on simulation: {self.initial_x}, {self.initial_y}")
-        #     vehicle_state.x = pose_msg.pose.pose.position.x - self.initial_x + self.waypoints[0, 1]
-        #     vehicle_state.y = pose_msg.pose.pose.position.y - self.initial_y + self.waypoints[0, 2]
-        #     curr_quat = pose_msg.pose.pose.orientation
-        #     vehicle_state.yaw = math.atan2(2 * (curr_quat.w * curr_quat.z + curr_quat.x * curr_quat.y),
-        #                       1 - 2 * (curr_quat.y ** 2 + curr_quat.z ** 2))
-        #     # vehicle_state.yaw = np.arctan2(np.sin(vehicle_state.yaw), np.cos(vehicle_state.yaw))
+            if self.initial_x==None or self.initial_y==None:
+                self.initial_x = pose_msg.pose.pose.position.x
+                self.initial_y = pose_msg.pose.pose.position.y
+                print(f"Initial pose on simulation: {self.initial_x}, {self.initial_y}")
+            vehicle_state.x = pose_msg.pose.pose.position.x - self.initial_x #+ self.waypoints[0, 1]
+            vehicle_state.y = pose_msg.pose.pose.position.y - self.initial_y #+ self.waypoints[0, 2]
+            curr_quat = pose_msg.pose.pose.orientation
+            vehicle_state.yaw = math.atan2(2 * (curr_quat.w * curr_quat.z + curr_quat.x * curr_quat.y),
+                              1 - 2 * (curr_quat.y ** 2 + curr_quat.z ** 2))
+            # vehicle_state.yaw = np.arctan2(np.sin(vehicle_state.yaw), np.cos(vehicle_state.yaw))
             
-        #     # print("yaw: ", vehicle_state.yaw)
-        #     vehicle_state.v = self.drive_msg.drive.speed
-        #     # vehicle_state.v = pose_msg.twist.twist.linear.x
-
-
+            # print("yaw: ", vehicle_state.yaw)
+            vehicle_state.v = pose_msg.twist.twist.linear.x
+            # vehicle_state.v = pose_msg.twist.twist.linear.x
 
         # quat = [quat_msg.x, quat_msg.y, quat_msg.z, quat_msg.w]
         # vehicle_state.yaw = math.atan2(2 * (quat[3] * quat[2] + quat[0] * quat[1]), 1 - 2 * (quat[1] ** 2 + quat[2] ** 2))
