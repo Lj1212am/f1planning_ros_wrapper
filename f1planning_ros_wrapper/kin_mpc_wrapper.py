@@ -56,11 +56,11 @@ class STMPCPlannerNode(Node):
         self.config_path = "/home/nvidia/f1-fifth/src/trajectory_csv"
         self.csv = "interpolated_trajectory_2.csv"
         self.map_name = os.path.join(self.config_path, self.csv)
-        self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1)
+        waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1)
 
-        x = self.waypoints[:, 1]
-        y = self.waypoints[:, 2]
-        v = self.waypoints[:, 5]
+        x = waypoints[:, 1]
+        y = waypoints[:, 2]
+        v = waypoints[:, 5]
 
         # Initialize the track using the waypoints
         self.track = Track.from_refline(x[10:WAYPOINT_NUM], y[10:WAYPOINT_NUM], v[10:WAYPOINT_NUM])
@@ -75,9 +75,9 @@ class STMPCPlannerNode(Node):
         self.sub_odom = self.create_subscription(Odometry, odom_topic, self.state_callback, 1)
         self.pub_drive = self.create_publisher(AckermannDriveStamped, drive_topic, 1)
         self.marker_pub = self.create_publisher(MarkerArray, 'waypoints_markers', 10)
-
+        self.pub_mpc_sol = self.create_publisher(Marker, 'mpc_solution', 10)
         # Timer for publishing waypoints as markers
-        self.create_timer(0.1, self.publish_waypoints_as_markers)
+        # self.create_timer(0.1, self.publish_waypoints_as_markers)
 
         # Initializations
         self.current_state = None
@@ -88,7 +88,28 @@ class STMPCPlannerNode(Node):
         waypointx = self.track.raceline.xs[:WAYPOINT_NUM]
         waypointy = self.track.raceline.ys[:WAYPOINT_NUM]
         waypointyaw = self.track.raceline.yaws[:WAYPOINT_NUM]
+        
         self.waypoints = np.column_stack((waypointx, waypointy, waypointyaw))
+        # self.publish_waypoints_as_markers()
+        
+
+    def render_mpc_sol(self):
+        """
+        Publish the MPC solution as a Marker in RViz.
+        """
+        
+        ref_traj_frenet = self.planner.ref_path
+        
+        ref_traj_x = ref_traj_frenet[0,:]
+        ref_traj_y = ref_traj_frenet[1,:]
+        ref_traj_yaw = ref_traj_frenet[3,:]
+
+        print('ref yaws', ref_traj_yaw)
+
+        ref_waypoints = np.column_stack((ref_traj_x, ref_traj_y, ref_traj_yaw))
+        
+        self.publish_waypoints_as_markers(ref_waypoints, False)
+        
 
     def state_callback(self, odom_msg):
         """
@@ -107,6 +128,8 @@ class STMPCPlannerNode(Node):
             linear_vel_x = odom_msg.twist.twist.linear.x
             linear_vel_y = odom_msg.twist.twist.linear.y
             yaw = self.quaternion_to_euler(orientation)
+        # CONVERT [-pi, pi] to [0, 2pi]
+        # yaw = (yaw + 2*np.pi) % (2 * np.pi)
 
         yaw_rate = odom_msg.twist.twist.angular.z
 
@@ -131,9 +154,11 @@ class STMPCPlannerNode(Node):
         # Plan using the STMPC planner
         try:
             steerv, accl = self.planner.plan(state_dict)
+            self.render_mpc_sol()
         except Exception as e:
             self.get_logger().error(f"Error in planner: {e}")
             steerv, accl = 0.0, 0.0
+
 
         # Update steering angle and speed
         dt = self.planner.config.DTK
@@ -146,37 +171,70 @@ class STMPCPlannerNode(Node):
         drive_msg.drive.steering_angle = self.steering_angle
         self.pub_drive.publish(drive_msg)
 
-    def publish_waypoints_as_markers(self):
-        """Publish waypoints as visualization markers in RViz."""
+    def publish_waypoints_as_markers(self, waypoints=None, ref=False):
+            
+        """ Publish waypoints as visualization markers in RViz """
         marker_array = MarkerArray()
-        for i, waypoint in enumerate(self.waypoints[:WAYPOINT_NUM]):
+        
+        if waypoints is None:
+            waypoints = self.waypoints
+
+        # print('waypoint yaws', waypoints[2])
+       
+        # Create markers for first 20 waypoints
+        # print('num waypoints', len(waypoints))
+        for i, waypoint in enumerate(waypoints[:WAYPOINT_NUM]):
+        # for i, waypoint in enumerate(self.waypoints):
             marker = Marker()
-            marker.header.frame_id = "map"
+            marker.header.frame_id = "map"  # Set appropriate frame ID
             marker.type = Marker.ARROW
             marker.action = Marker.ADD
-            marker.id = i
-            marker.scale.x = 1.0
-            marker.scale.y = 0.2
-            marker.scale.z = 0.2
+            marker.id = i  # Each marker needs a unique ID
+            marker.id = i + 1000  # Each marker needs a unique ID
+            marker.scale.x = 1.0  # Arrow length
+            marker.scale.y = 0.2  # Arrow width
+            marker.scale.z = 0.2  # Arrow height
+            if ref:
+                marker.id = i + 1000  # Each marker needs a unique ID
+                marker.scale.x = 1.0  # Arrow length
+                marker.scale.y = 0.2  # Arrow width
+                marker.scale.z = 0.2  # Arrow height
 
-            marker.pose.position.x = float(waypoint[0])
-            marker.pose.position.y = float(waypoint[1])
-            marker.pose.position.z = 0.2
+            # Set waypoint positions and orientations
+            marker.pose.position.x = float(waypoint[0])  # x-coordinate
+            marker.pose.position.y = float(waypoint[1])  # y-coordinate
+            marker.pose.position.z = 0.2  # z-coordinate (flat 2D track)
 
-            yaw = float(waypoint[2])
+            # Convert yaw to quaternion for orientation
+            yaw = float(waypoint[2])  # yaw angle
+            #convert yaw to 0 - 2ppi
+            yaw = yaw % (2 * math.pi)
+
             q = self.yaw_to_quaternion(yaw)
             marker.pose.orientation.x = q[0]
             marker.pose.orientation.y = q[1]
             marker.pose.orientation.z = q[2]
             marker.pose.orientation.w = q[3]
 
-            marker.color.a = 1.0
-            marker.color.r = 1.0
-            marker.color.g = 0.0
-            marker.color.b = 1.0
+            # Set the color of the marker
+            if ref:
+                marker.color.a = 1.0
+                marker.color.r = 0.0
+                marker.color.g = 1.0
+                marker.color.b = 0.0
+            else:
+                marker.color.a = 1.0  # Alpha
+                marker.color.r = 0.0
+                marker.color.g = 1.0
+                marker.color.b = 0.0
+                
+            
+        
 
+            # Append to the marker array
             marker_array.markers.append(marker)
 
+        # Publish the MarkerArray
         self.marker_pub.publish(marker_array)
 
     def quaternion_to_euler(self, orientation):

@@ -49,13 +49,13 @@ class mpc_config:
         default_factory=lambda: np.diag([0.01, 100.0])
     )  # input difference cost matrix, penalty for change of inputs - [accel, steering_speed]
     Qk: list = field(
-        default_factory=lambda: np.diag([18.5, 18.5, 3.5, 0.1])
+        default_factory=lambda: np.diag([38.5, 38.5, 3.5, 15.1])
     )  # state error cost matrix, for the the next (T) prediction time steps [x, y, v, yaw]
     Qfk: list = field(
-        default_factory=lambda: np.diag([18.5, 18.5, 3.5, 0.1])
+        default_factory=lambda: np.diag([38.5, 38.5, 3.5, 15.1])
     )  # final state error matrix, penalty  for the final state constraints: [x, y, v, yaw]
     N_IND_SEARCH: int = 20  # Search index number
-    DTK: float = 0.05  # time step [s] kinematic
+    DTK: float = 0.1  # time step [s] kinematic
     dlk: float = 0.03  # dist step [m] kinematic
     LENGTH: float = 0.58  # Length of the vehicle [m]
     WIDTH: float = 0.31  # Width of the vehicle [m]
@@ -227,7 +227,7 @@ class KMPCPlanner:
         :pind: Setpoint Index
         :return: reference trajectory ref_traj, reference steering angle
         """
-
+        # print('input cyaw to cal ref', cyaw)
         # Create placeholder Arrays for the reference trajectory for T steps
         ref_traj = np.zeros((self.config.NXK, self.config.TK + 1))
         ncourse = len(cx)
@@ -251,12 +251,16 @@ class KMPCPlanner:
         ref_traj[0, :] = cx[ind_list]
         ref_traj[1, :] = cy[ind_list]
         ref_traj[2, :] = sp[ind_list]
-        cyaw[cyaw - state.yaw > 4.5] = np.abs(
-            cyaw[cyaw - state.yaw > 4.5] - (2 * np.pi)
-        )
-        cyaw[cyaw - state.yaw < -4.5] = np.abs(
-            cyaw[cyaw - state.yaw < -4.5] + (2 * np.pi)
-        )
+        # cyaw[cyaw - state.yaw > 4.5] = np.abs(
+        #     cyaw[cyaw - state.yaw > 4.5] #- (2 * np.pi)
+        # )
+        # cyaw[cyaw - state.yaw < -4.5] = np.abs(
+        #     cyaw[cyaw - state.yaw < -4.5] #+ (2 * np.pi)
+        # )
+        # Adjust for yaw wrapping across ±π (±180°)
+        cyaw[cyaw - state.yaw > 4.5] -= 2 * np.pi  # Correct yaw by subtracting 2π if the difference is greater than 4.5 radians
+        cyaw[cyaw - state.yaw < -4.5] += 2 * np.pi  # Correct yaw by adding 2π if the difference is less than -4.5 radians
+
         ref_traj[3, :] = cyaw[ind_list]
 
         return ref_traj

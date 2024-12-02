@@ -312,13 +312,13 @@ class MPC(Node):
 
         # for trajectory csv files:
         # self.csv = "interpolated_trajectory_3.csv"
-        self.csv = 'wp_20241120_172548.csv'
+        self.csv = 'wp_20241125_132733.csv'
         # self.csv = 'interpolated_wp.csv'
         self.map_name = os.path.join(self.config_path, self.csv)
         self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
 
 
-        self.waypoints = self.waypoints[:-50,:]
+        self.waypoints = self.waypoints[:-10,:]
         self.waypoints[:, 3] += math.pi/2
         self.waypoints[:, 3] = np.unwrap(self.waypoints[:, 3])
         self.sin_yaw = np.sin(self.waypoints[:, 3])
