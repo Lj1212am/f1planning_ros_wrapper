@@ -172,7 +172,7 @@ def calc_ref_trajectory_jitted(x, y, v, yaw, NXK, TK, DTK, dlk, cx, cy, cyaw, sp
 class mpc_config:
     NXK: int = 4  # length of kinematic state vector: z = [x, y, v, yaw]
     NU: int = 2  # length of input vector: u = [steering speed, acceleration]
-    TK: int = 7  # finite time horizon length - kinematic
+    TK: int = 10  # finite time horizon length - kinematic
 
     # TODO: you may need to tune the following matrices
     Rk: list = field(
@@ -367,7 +367,7 @@ class MPC(Node):
         self.real_car = False
         self.config_path = "/home/rajnish/ros2_ws/src/trajectory_csv"
         
-        self.csv = "interpolated_trajectory_1.csv"
+        self.csv = "interpolated_trajectory_3.csv"
         self.map_name = os.path.join(self.config_path, self.csv)
         self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
 

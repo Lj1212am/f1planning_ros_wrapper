@@ -15,16 +15,16 @@ class mpc_config:
     NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
     TK: int = 5  # finite time horizon length
     Rk: list = field(
-        default_factory=lambda: np.diag([1.1, 0.1])
+        default_factory=lambda: np.diag([0.1, 0.01])
     )  # input cost matrix, penalty for inputs - [accel, steering_speed]
     Rdk: list = field(
-        default_factory=lambda: np.diag([1.1, 0.1])
+        default_factory=lambda: np.diag([0.1, 0.01])
     )  # input difference cost matrix, penalty for change of inputs - [accel, steering_speed]
     Qk: list = field(
-        default_factory=lambda: np.diag([0.0, 65.0, 0.0, 10.5, 5.0, 0.0, 185.0])
+        default_factory=lambda: np.diag([0.0, 35.0, 0.0, 1.5, 0.0, 0.0, 55.0])
     )  # state error cost matrix, for the the next (T) prediction time steps [s, ey, delta, vx, vy, wz, eyaw]
     Qfk: list = field(
-        default_factory=lambda: np.diag([0.0, 65.0, 0.0, 10.5, 5.0, 0.0, 185.0])
+        default_factory=lambda: np.diag([0.0, 35.0, 0.0, 1.5, 0.0, 0.0, 55.0])
     )  # final state error matrix, penalty  for the final state constraints: [s, ey, delta, vx, vy, wz, eyaw]
     N_IND_SEARCH: int = 20  # Search index number
     DTK: float = 0.1  # time step [s] kinematic
@@ -33,7 +33,7 @@ class mpc_config:
     MAX_STEER: float = 0.4189  # maximum steering angle [rad]
     MIN_DSTEER: float = -np.deg2rad(180.0)  # maximum steering speed [rad/s]
     MAX_DSTEER: float = np.deg2rad(180.0)  # maximum steering speed [rad/s]
-    MAX_SPEED: float = 3.0  # maximum speed [m/s]
+    MAX_SPEED: float = 26.0  # maximum speed [m/s]
     MIN_SPEED: float = 0.0  # minimum backward speed [m/s]
     MAX_ACCEL: float = 9.51  # maximum acceleration [m/ss]
     MIN_ACCEL: float = 0.0 #-9.51  # minimum acceleration [m/ss]
@@ -308,19 +308,20 @@ class NMPCPlanner:
         self.opti.subject_to(self.X[3, :] < self.config.MAX_SPEED)
 
         # solver
-        jit_options = {"flags": ["-O3"], "verbose": True}
+        jit_options = {"flags": ["-O3"], "verbose": True, "compiler":"ccache gcc", "temp_suffix":False}
         ipopt_opts = {
             "ipopt": {
                 "print_level": 1,
-                "max_iter": 200,
-                "acceptable_tol": 1e-8,
-                "acceptable_obj_change_tol": 1e-6,
+                "max_iter": 5000,
+                "acceptable_tol": 1e-6,
+                "acceptable_obj_change_tol": 1e-4,
                 "warm_start_init_point": "yes",
             },
             "print_time": 0,
             "jit": True, 
             "compiler": "shell",
             "jit_options": jit_options,
+            "jit_temp_suffix": False,
         }
         self.opti.solver("ipopt", ipopt_opts)
 
@@ -417,11 +418,12 @@ class NMPCPlanner:
         )
 
         if mu is None:
-            mu = 0.7
+            mu = 0.4
 
         # Goal state is the last point's velocity and all zeros for the other states (s, ey, delta, vx, vy, wz, epsi, curv)
         goal_state = ca.vertcat(
-            0.0, 0.0, 0.0, self.ref_path[3][-1], 0.0, 0.0, 0.0, self.ref_path[5][0], mu
+            # 0.0, 0.0, 0.0, self.ref_path[3][-1], 0.0, 0.0, 0.0, self.ref_path[5][0], mu
+            0.0, 0.0, 0.0, 18.0, 0.0, 0.0, 0.0, self.ref_path[5][0], mu
         )
         
 

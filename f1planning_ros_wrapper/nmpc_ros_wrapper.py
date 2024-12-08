@@ -25,20 +25,36 @@ from geometry_msgs.msg import PoseWithCovarianceStamped, Point
 from visualization_msgs.msg import MarkerArray, Marker
 from builtin_interfaces.msg import Time
 # Number of waypoints to process
-waypoint_num = 1000
+waypoint_num = -0
 class NMPCPlannerNode(Node):
     def __init__(self):
         super().__init__('nmpc_planner_node')
         self.real_car = True
         self.config_path = "/home/rajnish/ros2_ws/src/trajectory_csv/"
-        self.csv = "interpolated_trajectory_1.csv"
+        self.csv = "right_slalom_trajectory.csv"
         self.map_name = os.path.join(self.config_path, self.csv)
-        self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1)
-        x = self.waypoints[:, 1]*10.0
-        y = self.waypoints[:, 2]*10.0
-        v = self.waypoints[:, 5]
+        # self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1)
+        self.waypoints = np.loadtxt(self.map_name, delimiter=',', skiprows=1)
+        x = self.waypoints[:, 0]*10.0
+        y = self.waypoints[:, 1]*10.0
+        # X = np.stack((x, y), axis=1)  # Shape (N, 2)
+
+        # degree = 45
+        # rot_mat = np.array([[np.cos(np.radians(degree)), -np.sin(np.radians(degree))],
+        #                     [np.sin(np.radians(degree)), np.cos(np.radians(degree))]])  # Shape (2, 2)
+
+        # # X_ = X @ rot_mat.T
+        # x = X[0]
+        # y = X[1]
+        # initial_x = x[0]
+        # initial_y = y[0]
+        # x -= initial_x
+        # y -= initial_y
+        # v = self.waypoints[:, 5] * 10.0
+        v = np.ones_like(x) * 20.0
         # Initialize the track using waypoints
-        self.track = Track.from_refline(x[10:waypoint_num], y[10:waypoint_num], v[10:waypoint_num])
+        # self.track = Track.from_refline(x[1:waypoint_num], y[1:waypoint_num], v[1:waypoint_num])
+        self.track = Track.from_refline(x, y, v)
         drive_topic = '/control/command/control_cmd'
         if self.real_car:
             odom_topic = '/awsim/ground_truth/localization/kinematic_state'
@@ -166,6 +182,7 @@ class NMPCPlannerNode(Node):
             self.render_mpc_sol()
         except Exception as e:
             self.get_logger().error(f'Error in planning: {e}')
+            # import pdb; pdb.set_trace()
         # Integrate steerv to get steering angle and integrate accl to get speed
         dt = self.planner.config.DTK
         steering_angle = self.steering_angle + steerv * dt
