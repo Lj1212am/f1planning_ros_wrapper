@@ -9,6 +9,7 @@ import os
 from dataclasses import dataclass, field
 from f1tenth_gym.envs.track import Track
 import casadi as ca
+import csv
 
 import sys
 
@@ -31,7 +32,7 @@ class NMPCPlannerNode(Node):
         super().__init__('nmpc_planner_node')
         self.real_car = True
         self.config_path = "/home/rajnish/ros2_ws/src/trajectory_csv/"
-        self.csv = "right_slalom_trajectory.csv"
+        self.csv = "corrected_right_slalom_trajectory.csv"
         self.map_name = os.path.join(self.config_path, self.csv)
         # self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1)
         self.waypoints = np.loadtxt(self.map_name, delimiter=',', skiprows=1)
@@ -39,22 +40,23 @@ class NMPCPlannerNode(Node):
         y = self.waypoints[:, 1]*10.0
         # X = np.stack((x, y), axis=1)  # Shape (N, 2)
 
-        # degree = 45
-        # rot_mat = np.array([[np.cos(np.radians(degree)), -np.sin(np.radians(degree))],
-        #                     [np.sin(np.radians(degree)), np.cos(np.radians(degree))]])  # Shape (2, 2)
-
-        # # X_ = X @ rot_mat.T
-        # x = X[0]
-        # y = X[1]
-        # initial_x = x[0]
-        # initial_y = y[0]
-        # x -= initial_x
-        # y -= initial_y
-        # v = self.waypoints[:, 5] * 10.0
         v = np.ones_like(x) * 20.0
         # Initialize the track using waypoints
         # self.track = Track.from_refline(x[1:waypoint_num], y[1:waypoint_num], v[1:waypoint_num])
         self.track = Track.from_refline(x, y, v)
+
+
+
+        # Path to the output CSV file
+        self.output_csv_path = "/home/rajnish/ros2_ws/src/cross_track_error_log.csv"
+        
+        # Open the CSV file and write the header
+        self.csv_file = open(self.output_csv_path, mode='w', newline='')
+        self.csv_writer = csv.writer(self.csv_file)
+        self.csv_writer.writerow(["timestamp", "cross_track_error", "current_velocity", "goal_velocity"])
+        self.get_logger().info(f'Initialized CSV logging at {self.output_csv_path}')
+
+
         drive_topic = '/control/command/control_cmd'
         if self.real_car:
             odom_topic = '/awsim/ground_truth/localization/kinematic_state'
@@ -179,7 +181,18 @@ class NMPCPlannerNode(Node):
         # Plan using the NMPC planner
         try:
             accl, steerv = self.planner.plan(state_dict, self.mu)
-            self.render_mpc_sol()
+
+            # Log the cross-track error to the CSV file
+            current_time = self.get_clock().now().to_msg()
+            timestamp = f"{current_time.sec}.{current_time.nanosec}"
+            cross_track_error = self.planner.ey  # Access the cross-track error
+            current_velocity = self.planner.curr_vel  # Access the current velocity
+            goal_velocity = self.planner.goal_vel  # Access the goal velocity
+            self.csv_writer.writerow([timestamp, cross_track_error, current_velocity, goal_velocity])
+            self.csv_file.flush()  # Ensure data is written to disk
+            self.get_logger().info(f'Logged data: CTE={cross_track_error}, Curr_Vel={current_velocity}, Goal_Vel={goal_velocity}')
+
+            
         except Exception as e:
             self.get_logger().error(f'Error in planning: {e}')
             # import pdb; pdb.set_trace()
@@ -269,6 +282,16 @@ class NMPCPlannerNode(Node):
         """ Convert yaw angle to a quaternion (x, y, z, w) """
     
         return [0.0, 0.0, np.sin(yaw / 2), np.cos(yaw / 2)]
+    
+
+    def destroy_node(self):
+        # Ensure the CSV file is properly closed
+        if self.csv_file:
+            self.csv_file.close()
+            self.get_logger().info(f'Closed CSV file at {self.output_csv_path}')
+        super().destroy_node()
+    
+
 def main(args=None):
     rclpy.init(args=args)
     node = NMPCPlannerNode()
