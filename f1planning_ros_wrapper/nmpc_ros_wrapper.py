@@ -32,7 +32,7 @@ class NMPCPlannerNode(Node):
         super().__init__('nmpc_planner_node')
         self.real_car = True
         self.config_path = "/home/rajnish/ros2_ws/src/trajectory_csv/"
-        self.csv = "corrected_right_slalom_trajectory.csv"
+        self.csv = "right_slalom_trajectory.csv"
         self.map_name = os.path.join(self.config_path, self.csv)
         # self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1)
         self.waypoints = np.loadtxt(self.map_name, delimiter=',', skiprows=1)
