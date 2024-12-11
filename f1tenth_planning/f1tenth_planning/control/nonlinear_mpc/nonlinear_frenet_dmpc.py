@@ -13,32 +13,32 @@ import casadi as ca
 class mpc_config:
     NXK: int = 7  # length of dynamic state vector: z = [s, ey, delta, vx, vy, wz, eyaw]
     NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
-    TK: int = 16  # finite time horizon length
+    TK: int = 5  # finite time horizon length
     Rk: list = field(
-        default_factory=lambda: np.diag([0.01, 2.0])
+        default_factory=lambda: np.diag([0.01, 0.01])
     )  # input cost matrix, penalty for inputs - [accel, steering_speed]
     Rdk: list = field(
-        default_factory=lambda: np.diag([0.01, 2.0])
+        default_factory=lambda: np.diag([0.01, 0.01])
     )  # input difference cost matrix, penalty for change of inputs - [accel, steering_speed]
     Qk: list = field(
-        default_factory=lambda: np.diag([0.0, 25.0, 0.0, 5.0, 5.0, 0.0, 35.0])
+        default_factory=lambda: np.diag([0.0, 1.0, 0.0, 0.01, 0.0, 0.0, 1.0])
     )  # state error cost matrix, for the the next (T) prediction time steps [s, ey, delta, vx, vy, wz, eyaw]
     Qfk: list = field(
-        default_factory=lambda: np.diag([0.0, 25.0, 0.0, 5.0, 5.0, 0.0, 35.0])
+        default_factory=lambda: np.diag([0.0, 1.0, 0.0, 0.01, 0.0, 0.0, 1.0])
     )  # final state error matrix, penalty  for the final state constraints: [s, ey, delta, vx, vy, wz, eyaw]
 
 
     N_IND_SEARCH: int = 20  # Search index number
-    DTK: float = 0.05  # time step [s] kinematic
-    dlk: float = 0.03  # dist step [m] kinematic
+    DTK: float = 0.1  # time step [s] kinematic
+    dlk: float = 0.1  # dist step [m] kinematic
     MIN_STEER: float = -0.4189  # maximum steering angle [rad]
     MAX_STEER: float = 0.4189  # maximum steering angle [rad]
     MIN_DSTEER: float = -np.deg2rad(180.0)  # maximum steering speed [rad/s]
     MAX_DSTEER: float = np.deg2rad(180.0)  # maximum steering speed [rad/s]
-    MAX_SPEED: float = 10.0  # maximum speed [m/s]
+    MAX_SPEED: float = 15.0  # maximum speed [m/s]
     MIN_SPEED: float = 0.0  # minimum backward speed [m/s]
     MAX_ACCEL: float = 9.51  # maximum acceleration [m/ss]
-    MIN_ACCEL: float = -9.51  # minimum acceleration [m/ss]
+    MIN_ACCEL: float = 0.0#-9.51  # minimum acceleration [m/ss]
     V_SWITCH: float = 1.0  # switching velocity from kinematic to dynamic [m/s]
 
     # Vehicle parameters
@@ -244,7 +244,9 @@ class NMPCPlanner:
 
             # [s, ey, delta, vx, vy, wz, epsi]
             deriv_x_hs = ca.vertcat(
-                ((vx * ca.cos(epsi) - vy * ca.sin(epsi)) / (1 - cur * ey)),
+                #modulo by the track smax
+                
+                ((vx * ca.cos(epsi) - vy * ca.sin(epsi)) / (1 - cur * ey)),# % self.track.centerline.s_max,
                 (vx * ca.sin(epsi) + vy * ca.cos(epsi)),
                 deltv,
                 (a - 1 / self.config.M * Fyf * ca.sin(delta) + wz * vy),
@@ -259,7 +261,7 @@ class NMPCPlanner:
 
             # [s, ey, delta, vx, vy(0.0), wz(0.0), epsi]
             deriv_x_ls = ca.vertcat(
-                (vx * ca.cos(epsi)) / (1 - ey * cur),
+                (vx * ca.cos(epsi)) / (1 - ey * cur),# % self.track.centerline.s_max,
                 (vx * ca.sin(epsi)),
                 deltv,
                 a,
@@ -310,11 +312,11 @@ class NMPCPlanner:
         self.opti.subject_to(self.X[3, :] < self.config.MAX_SPEED)
 
         # solver
-        jit_options = {"flags": ["-O3"], "verbose": True}
+        jit_options = {"flags": ["-O3"], "verbose": True, "compiler":"ccache gcc", "temp_suffix":False}
         ipopt_opts = {
             "ipopt": {
                 "print_level": 1,
-                "max_iter": 50,
+                "max_iter": 5000,
                 "acceptable_tol": 1e-6,
                 "acceptable_obj_change_tol": 1e-4,
                 "warm_start_init_point": "yes",
@@ -323,8 +325,10 @@ class NMPCPlanner:
             "jit": True, 
             "compiler": "shell",
             "jit_options": jit_options,
+            "jit_temp_suffix": False,
         }
         self.opti.solver("ipopt", ipopt_opts)
+
 
     def mpc_prob_solve(self, goal_state, current_state):
         print("goal state", goal_state)
@@ -335,8 +339,7 @@ class NMPCPlanner:
             current_state["pose_theta"],
             use_raceline=True,
         )
-        print("epsi ", epsi)
-
+        
         current_state_vec = ca.vertcat(
             s,
             ey,
@@ -386,10 +389,10 @@ class NMPCPlanner:
         self.ox = x_sol[0, :].flatten()
         self.oy = x_sol[1, :].flatten()
         # TODO convert back to cartesian
-        # for i, (s, ey) in enumerate(zip(self.ox, self.oy)):
-        #     curr_x, curr_y, _ = self.track.frenet_to_cartesian(s, ey, 0.0, use_raceline=True)
-        #     self.ox[i] = curr_x
-        #     self.oy[i] = curr_y
+        for i, (s, ey) in enumerate(zip(self.ox, self.oy)):
+            curr_x, curr_y, _ = self.track.frenet_to_cartesian(s, ey, 0.0, use_raceline=True)
+            self.ox[i] = curr_x
+            self.oy[i] = curr_y
 
         return self.oa[0], self.odelta_v[0]
 
@@ -418,7 +421,7 @@ class NMPCPlanner:
             self.waypoints[4],
         )
         if mu is None:
-            mu = 0.7
+            mu = 1.0
 
         # Goal state is the last point's velocity and all zeros for the other states (s, ey, delta, vx, vy, wz, epsi, curv)
         goal_state = ca.vertcat(

@@ -161,7 +161,7 @@ def calc_ref_trajectory_jitted(x, y, v, yaw, NXK, TK, DTK, dlk, cx, cy, cyaw, sp
 class mpc_config:
     NXK: int = 4  # length of kinematic state vector: z = [x, y, v, yaw]
     NU: int = 2  # length of input vector: u = [steering speed, acceleration]
-    TK: int = 5  # finite time horizon length - kinematic
+    TK: int = 7  # finite time horizon length - kinematic
 
     # TODO: you may need to tune the following matrices
     Rk: list = field(
@@ -178,8 +178,8 @@ class mpc_config:
     )  # final state error matrix, penalty  for the final state constraints: [x, y, delta, v, yaw, yaw-rate, beta]
 
     N_IND_SEARCH: int = 20
-    DTK: float = 0.01
-    dlk: float = 0.3
+    DTK: float = 0.1
+    dlk: float = 0.03
     LENGTH: float = 0.9
     WIDTH: float = 0.54
     WB: float = 0.53
@@ -253,8 +253,8 @@ def transform_ref_traj_to_local_frame(ref_traj: np.array, x, y, yaw):
     ref_traj_yaw = ref_traj[3, :] - yaw
 
     # Step 4: Unwrap yaw to ensure continuity
-    # ref_traj_yaw = np.unwrap(ref_traj_yaw)
-    # ref_traj_yaw = smooth_yaw(ref_traj_yaw)
+    ref_traj_yaw = np.unwrap(ref_traj_yaw)
+    ref_traj_yaw = smooth_yaw(ref_traj_yaw)
 
 
     # Step 5: Normalize yaw to lie within [-π, π]
@@ -312,16 +312,13 @@ class MPC(Node):
 
         # for trajectory csv files:
         # self.csv = "interpolated_trajectory_3.csv"
-        self.csv = 'corrected_right_slalom_trajectory.csv'
+        self.csv = 'slalom_centerline.csv'
         # self.csv = 'interpolated_wp.csv'
         self.map_name = os.path.join(self.config_path, self.csv)
-        self.waypoints = np.loadtxt(self.map_name, delimiter=',', skiprows=1) 
-        x = self.waypoints[:, 0] * 10.0
-        y = self.waypoints[:, 1] * 10.0
-        self.waypoints[:, 0] = x
-        self.waypoints[:, 1] = y
+        self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
+        # self.waypoints = np.loadtxt(self.map_name, delimiter=',', skiprows=1) 
         
-        # self.waypoints[:, :2] *= 10.0
+        self.waypoints[:, :2]  *= 3.0
 
 
         # self.waypoints = self.waypoints[:-10,:]
@@ -331,14 +328,14 @@ class MPC(Node):
         # self.cos_yaw = np.cos(self.waypoints[:, 3])
 
         # for waypoint csv files:
-        # waypoints = np.loadtxt(self.map_name, delimiter=',', skiprows=1) 
+        # self.waypoints = np.loadtxt(self.map_name, delimiter=',', skiprows=1) 
 
         # waypoint_x = waypoints[:, 0]
         # waypoint_y = waypoints[:, 1]
         # waypoint_z = waypoints[:, 2]
         # waypoint_v = waypoints[:, 3]
         # self.waypoints = np.column_stack((np.ones(waypoint_x.shape), waypoint_x, waypoint_y, np.ones(waypoint_x.shape), np.ones(waypoint_x.shape), waypoint_v))
-
+        
 
         
 
@@ -348,7 +345,8 @@ class MPC(Node):
 
         drive_topic = '/drive'
         if self.real_car:
-            odom_topic = '/gnss_to_local/local_position'
+            odom_topic = "/transformed/odometry"
+            # odom_topic = '/gnss_to_local/local_position'
         else:
             odom_topic = '/ego_racecar/odom'
 
@@ -433,8 +431,8 @@ class MPC(Node):
     def pose_callback(self, pose_msg):
         print("pose callback")
         vehicle_state = self.get_vehicle_state(pose_msg)
-        velocity = np.ones_like(self.waypoints[:, 2])  * 5.0
-        ref_path = self.calc_ref_trajectory(vehicle_state, self.waypoints[:, 0], self.waypoints[:, 1], self.waypoints[:, 2], velocity)
+        velocity = np.ones_like(self.waypoints[:, 0]) * 3.0
+        ref_path = self.calc_ref_trajectory(vehicle_state, self.waypoints[:, 0], self.waypoints[:, 1], self.waypoints[:,2], velocity)
        
         ref_path_local = transform_ref_traj_to_local_frame(ref_path, vehicle_state.x, vehicle_state.y, vehicle_state.yaw)
         
@@ -471,7 +469,7 @@ class MPC(Node):
             if ox is not None and oy is not None:
                 local_coords = np.vstack((ox, oy))
                 global_coords = transform_to_global_frame(
-                    local_coords, vehicle_state.x, vehicle_state.y,  vehicle_state.yaw #ref_path[3,0]#
+                    local_coords, vehicle_state.x, vehicle_state.y, ref_path[3,0]# vehicle_state.yaw
                 )
                 self.predict_traj_plot.setData(global_coords[0, :], global_coords[1, :])
 

@@ -30,6 +30,7 @@ Last Modified: 8/1/22
 import numpy as np
 import gymnasium as gym
 from f110_gym.envs import F110Env
+from f1tenth_gym.envs.track import Track
 import time
 
 from f1tenth_planning.control.dynamic_mpc.dynamic_mpc import STMPCPlanner
@@ -40,12 +41,27 @@ def main():
     STMPC example. This example uses fixed waypoints throughout the 2 laps.
     For an example using dynamic waypoints, see the lane switcher example.
     """
+    config_path = "/home/lee/work/f1-fifth/src/trajectory_csv"
+    
+    csv = "DualLaneChange_waypoints.csv"
+    map_name = os.path.join(config_path, csv)
+    waypoints = np.loadtxt(map_name, delimiter=';', skiprows=1) 
+    
+    # waypoints[:, 3] += math.pi/2
+    sin_yaw = np.sin(waypoints[:, 3])
+    cos_yaw = np.cos(waypoints[:, 3])
+    
+    x = waypoints[:, 1]
+    y = waypoints[:, 2]
+    v = waypoints[:, 5]
+    # create track from custom reference line
+    track = Track.from_refline(x=x, y=y, velx=v)
 
     # create environment
     env: F110Env = gym.make(
         "f110_gym:f110-v0",
         config={
-            "map": "Spielberg",
+            "map": track,
             "num_agents": 1,
             "control_input": "accl",
             "observation_config": {"type": "dynamic_state"},

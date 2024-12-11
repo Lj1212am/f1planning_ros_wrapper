@@ -1,0 +1,6 @@
+*__pycache__*
+*.o
+*.so
+*/images/*
+*.n*
+*.c

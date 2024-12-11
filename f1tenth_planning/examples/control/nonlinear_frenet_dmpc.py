@@ -10,20 +10,47 @@ import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from f1tenth_planning.control.nonlinear_mpc.nonlinear_frenet_dmpc import NMPCPlanner
-
+from f1tenth_gym.envs.track import Track
 
 def main():
     """
     KMPC example. This example uses fixed waypoints throughout the 2 laps.
     For an example using dynamic waypoints, see the lane switcher example.
     """
+    config_path = "/home/lee/work/f1-fifth/src/trajectory_csv"
+    
+    csv = "right_slalom_trajectory.csv"
+    map_name = os.path.join(config_path, csv)
+    waypoints = np.loadtxt(map_name, delimiter=',', skiprows=1) 
+    
+    
+    # x = waypoints[:, 1]
+    # y = waypoints[:, 2]
+    # v = waypoints[:, 5]
+    x = waypoints[:, 0] * 3.0
+    x = x[:-1]
+    y = waypoints[:, 1] * 3.0
+    y = y[:-1]
+    end_wp_x = x[0] - 0.1
+    end_wp_y = y[0] 
+    #add the waypoints to the end of the list
+    # x = np.append(x, end_wp_x)
+    # y = np.append(y, end_wp_y)
+    # have v be the same size as x and y at velocity 10
+    v = np.ones_like(x) * 5.0
+    # v = 
+    # # create track from custom reference line
+    track = Track.from_refline(x=x, y=y, velx=v)
 
+    custom_params = F110Env.f1tenth_vehicle_params()
+    custom_params["mu"] = 1.0
     # create environment
     env: F110Env = gym.make(
         "f1tenth_gym:f1tenth-v0",
         config={
             "map": "Spielberg_blank",
             "num_agents": 1,
+            "params": custom_params,
             "control_input": "accl",
             "observation_config": {"type": "original"},
         },
@@ -31,20 +58,20 @@ def main():
     )
 
     # create planner
-    planner = NMPCPlanner(track=env.track, debug=False)
-    planner.config.dlk = env.track.raceline.ss[1] - env.track.raceline.ss[0]
+    planner = NMPCPlanner(track=track, debug=False)
+    planner.config.dlk = track.raceline.ss[1] - track.raceline.ss[0]
 
     env.unwrapped.add_render_callback(planner.render_waypoints)
     env.unwrapped.add_render_callback(planner.render_local_plan)
-    # env.unwrapped.add_render_callback(planner.render_mpc_sol)
+    env.unwrapped.add_render_callback(planner.render_mpc_sol)
 
     # reset environment
     poses = np.array(
         [
             [
-                env.track.raceline.xs[0],
-                env.track.raceline.ys[0],
-                env.track.raceline.yaws[0],
+                track.raceline.xs[0],
+                track.raceline.ys[0],
+                track.raceline.yaws[0],
             ]
         ]
     )
@@ -56,7 +83,7 @@ def main():
     start = time.time()
     
     ego_obs = dict()
-    print('dict of state', obs.keys())
+    # print('dict of state', obs.keys())
     ego_obs["pose_x"] = obs["poses_x"][0]
     ego_obs["pose_y"] = obs["poses_y"][0]
     ego_obs["pose_theta"] = obs["poses_theta"][0]

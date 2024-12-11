@@ -29,12 +29,14 @@ Last Modified: 8/1/22
 
 import numpy as np
 import gymnasium as gym
-from f110_gym.envs import F110Env
+from f1tenth_gym.envs import F110Env
 import time
+from f1tenth_gym.envs.track import Track
+import os
 
 import sys
 
-sys.path.append('/home/nvidia/f1-fifth/src/f1planning_ros_wrapper/f1tenth_planning')
+sys.path.append('/home/lee/work/f1-fifth/src/f1planning_ros_wrapper/f1tenth_planning')
 
 from f1tenth_planning.control.kinematic_mpc.kinematic_mpc import KMPCPlanner, mpc_config
 
@@ -45,24 +47,49 @@ def main():
     For an example using dynamic waypoints, see the lane switcher example.
     """
 
+    config_path = "/home/lee/work/f1-fifth/src/trajectory_csv"
+    
+    csv = "right_slalom_trajectory.csv"
+    map_name = os.path.join(config_path, csv)
+    waypoints = np.loadtxt(map_name, delimiter=',', skiprows=1) 
+    
+    
+    # x = waypoints[:, 1]
+    # y = waypoints[:, 2]
+    # v = waypoints[:, 5]
+    x = waypoints[:, 0] * 3.0
+    y = waypoints[:, 1] * 3.0
+    end_wp_x = x[0] - 0.1
+    end_wp_y = y[0] 
+    #add the waypoints to the end of the list
+    x = np.append(x, end_wp_x)
+    y = np.append(y, end_wp_y)
+    # have v be the same size as x and y at velocity 10
+    v = np.ones_like(x) * 5.0
+    # v = 
+    # # create track from custom reference line
+    track = Track.from_refline(x=x, y=y, velx=v)
+
+    custom_params = F110Env.f1tenth_vehicle_params()
+    custom_params["mu"] = 0.01
     # create environment
     env: F110Env = gym.make(
         "f1tenth_gym:f1tenth-v0",
         config={
             "map": "Spielberg_blank",
             "num_agents": 1,
+            "params": custom_params,
             "control_input": "accl",
             "observation_config": {"type": "original"},
         },
         render_mode="human",
     )
-
     # create planner
     config = mpc_config()
     config.WB = 0.531
-    planner = KMPCPlanner(track=env.track, config=config, debug=False)
+    planner = KMPCPlanner(track=track, config=config, debug=False)
     planner.config.dlk = (
-        env.track.raceline.ss[1] - env.track.raceline.ss[0]
+        track.raceline.ss[1] - track.raceline.ss[0]
     )  # waypoint spacing
     env.unwrapped.add_render_callback(planner.render_waypoints)
     env.unwrapped.add_render_callback(planner.render_local_plan)
@@ -72,9 +99,9 @@ def main():
     poses = np.array(
         [
             [
-                env.track.raceline.xs[0],
-                env.track.raceline.ys[0],
-                env.track.raceline.yaws[0],
+                track.raceline.xs[0],
+                track.raceline.ys[0],
+                track.raceline.yaws[0],
             ]
         ]
     )

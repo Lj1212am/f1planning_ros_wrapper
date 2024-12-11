@@ -7,7 +7,7 @@ import sys
 import math
 import os
 
-sys.path.append('/home/nvidia/f1-fifth/src/f1planning_ros_wrapper/f1tenth_planning')
+sys.path.append('/home/lee/work/f1-fifth/src/f1planning_ros_wrapper/f1tenth_planning')
 
 #NMPC Imports
 from dataclasses import dataclass, field
@@ -26,33 +26,43 @@ import message_filters
 from visualization_msgs.msg import MarkerArray, Marker
 
 # from 0 - 1000
-waypoint_num = 1000
+waypoint_num = -10
 class NMPCPlannerNode(Node):
     def __init__(self):
         super().__init__('nmpc_planner_node')
         
-        self.real_car = True
-        self.config_path = "/home/nvidia/f1-fifth/src/trajectory_csv"
+        self.real_car = False
+        self.config_path = "/home/lee/work/f1-fifth/src/trajectory_csv"
         
-        self.csv = "interpolated_trajectory_2.csv"
+        self.csv = "slalom_centerline.csv"
         self.map_name = os.path.join(self.config_path, self.csv)
+        # self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1)
         self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
         
         # self.waypoints[:, 3] += math.pi/2
-        self.sin_yaw = np.sin(self.waypoints[:, 3])
-        self.cos_yaw = np.cos(self.waypoints[:, 3])
+        # self.sin_yaw = np.sin(self.waypoints[:, 3])
+        # self.cos_yaw = np.cos(self.waypoints[:, 3])
         
-        x = self.waypoints[:, 1]
-        y = self.waypoints[:, 2]
+        # x = self.waypoints[:, 1]
+        # y = self.waypoints[:, 2]
+        x = self.waypoints[:, 0] * 3.0
+        y = self.waypoints[:, 1] * 3.0
+        
+        # move x and y to zero
+        x = x - x[0]
+        y = y - y[0]
+        
         # velx = self.waypoints[:, 2]
         # vely = self.waypoints[:, 3]
         
         # v = np.sqrt(velx**2 + vely**2)
-        v = self.waypoints[:, 5]
+        # v = self.waypoints[:, 5] *3.0 /10.0
+        v = np.ones_like(x) * 3.0
         
         
         # Now pass the processed x, y, and velx to the Track class
-        self.track = Track.from_refline(x[10:waypoint_num], y[10:waypoint_num], v[10:waypoint_num])
+        # self.track = Track.from_refline(x[10:waypoint_num], y[10:waypoint_num], v[10:waypoint_num])
+        self.track = Track.from_refline(x, y, v)
         # Initialize Subscribers / Publishers for the controller
         
         drive_topic = '/drive'
@@ -104,7 +114,7 @@ class NMPCPlannerNode(Node):
         self.waypoints = np.column_stack((waypointx, waypointy, waypointyaw))
         
         ##setup a timer callpacl to publish waypoints as markers
-        self.timer = self.create_timer(0.1, self.publish_waypoints_as_markers)
+        self.timer = self.create_timer(1.0, self.publish_waypoints_as_markers)
         # self.publish_waypoints_as_markers(self.waypoints)
         
         self.old_steerv = 0.0
@@ -254,6 +264,11 @@ class NMPCPlannerNode(Node):
         
         try:
             accl, steerv = self.planner.plan(state_dict, self.mu)
+            # # TODO convert back to cartesian
+            # for i, (s, ey) in enumerate(zip(self.planner.ox, self.planner.oy)):
+            #     curr_x, curr_y, _ = self.planner.track.frenet_to_cartesian(s, ey, 0.0, use_raceline=True)
+            #     self.planner.ox[i] = curr_x
+            #     self.planner.oy[i] = curr_y
             print('done planning')
             # self.render_mpc_sol()
         except Exception as e:
@@ -263,7 +278,7 @@ class NMPCPlannerNode(Node):
         
         # integrate steerv to get steering angle and integrate accl to get speed us dt =0.1
         dt = self.planner.config.DTK
-        print('dt', dt)
+        # print('dt', dt)
         self.steering_angle = self.steering_angle + steerv * dt
         linear_vel_x = linear_vel_x + accl * dt
         self.speed = linear_vel_x
