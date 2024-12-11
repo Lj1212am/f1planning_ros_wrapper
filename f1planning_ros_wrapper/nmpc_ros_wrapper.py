@@ -9,7 +9,7 @@ import sys
 import math
 import os
 
-sys.path.append('/home/nvidia/f1-fifth/src/f1planning_ros_wrapper/f1tenth_planning')
+sys.path.append('/home/nvidia/ros_ws/src/f1-fifth/src/f1planning_ros_wrapper/f1tenth_planning')
 
 #NMPC Imports
 from dataclasses import dataclass, field
@@ -35,80 +35,44 @@ from matplotlib import cm, colormaps
 from matplotlib.colors import Normalize
 
 # from 0 - 1000
-waypoint_first = 5
-waypoint_num = -5
-
-
-def custom_waypoints_to_track(csv_file):
-    config_path = "/home/nvidia/f1-fifth/src/trajectory_csv"
-
-    # csv = 'wp_20241125_132733.csv'
-    # csv = 'interpolated_wp.csv'
-    csv = csv_file
-    # csv = 'interpolated_wp.csv'
-    map_name = os.path.join(config_path, csv)
-    waypoints = np.loadtxt(map_name, delimiter=';', skiprows=1) 
-
-    map_name = os.path.join(config_path, csv)
-    waypoints = np.loadtxt(map_name, delimiter=';', skiprows=1) 
-    
-    # waypoints[:, 3] += math.pi/2
-    sin_yaw = np.sin(waypoints[:, 3])
-    cos_yaw = np.cos(waypoints[:, 3])
-    
-    x = waypoints[:, 1]
-    y = waypoints[:, 2]
-    v = waypoints[:, 5]
-
-    x = x[waypoint_first:waypoint_num]
-    y = y[waypoint_first:waypoint_num] 
-    v = v[waypoint_first:waypoint_num]# / 3.0
-
-    #filter topull 1 from every ten waypoints, to make the path smoother
-    x = x[::10]
-    y = y[::10]
-    v = v[::10]
-
-    
-    # make sure cubic spline won't fail
-    distances = np.sqrt(np.diff(x)**2 + np.diff(y)**2)
-    t = np.concatenate(([0], np.cumsum(distances)))  # Parameter t (cumulative distance)
-
-    # Remove points where `t` values are not strictly increasing
-    mask = np.diff(t) > 1e-6  # Keep points where the difference in `t` is significant
-    mask = np.insert(mask, 0, True)  # Always include the first point
-    x = x[mask]
-    y = y[mask]
-    t = t[mask]
-    
-    track = Track.from_refline(x, y, v)
-    return track 
-
+waypoint_num = -1
 class NMPCPlannerNode(Node):
     def __init__(self):
         super().__init__('nmpc_planner_node')
         self.plot = False
-        self.real_car = True
+        self.real_car = False
+        self.config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
         
-        # wp_track = custom_waypoints_to_track('wp_20241125_132733.csv')
-        interpolated_wp_track = custom_waypoints_to_track('interpolated_trajectory_3.csv')
+        self.csv = "right_slalom_trajectory.csv"
+        self.map_name = os.path.join(self.config_path, self.csv)
+        # self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
+        self.waypoints = np.loadtxt(self.map_name, delimiter=',', skiprows=1) 
         
-        # #plot the yaws of the two tracks
-        # plt.plot(wp_track.raceline.yaws)
-        # plt.plot(interpolated_wp_track.raceline.yaws)
-        # plt.show()
-
-
-        self.track = interpolated_wp_track
+        # self.waypoints[:, 3] += math.pi/2
+        # self.sin_yaw = np.sin(self.waypoints[:, 3])
+        # self.cos_yaw = np.cos(self.waypoints[:, 3])
         
-        # self.track.raceline.yaws = (self.track.raceline.yaws + 2 * np.pi) % (2 * np.pi)  # Normalize to 0 - 2pi
-        # self.track.raceline.yaws = (self.track.raceline.yaws + np.pi) % (2 * np.pi)      # Flip directions
+        # x = self.waypoints[:, 1]
+        # y = self.waypoints[:, 2]
+        x = self.waypoints[:, 0] * 3.0
+        y = self.waypoints[:, 1] * 3.0
+        # velx = self.waypoints[:, 2]
+        # vely = self.waypoints[:, 3]
+        
+        # v = np.sqrt(velx**2 + vely**2)
+        # v = self.waypoints[:, 5]
+        v = np.ones_like(x) * 3.0
+        
+        
+        # Now pass the processed x, y, and velx to the Track class
+        # self.track = Track.from_refline(x[10:waypoint_num], y[10:waypoint_num], v[10:waypoint_num])
+        self.track = Track.from_refline(x, y, v)
         # Initialize Subscribers / Publishers for the controller
         
         drive_topic = '/drive'
         if self.real_car:
-            odom_topic = '/transformed/odometry'
-            # odom_topic = '/gnss_to_local/odometry'
+            # odom_topic = '/transformed/odometry'
+            odom_topic = '/gnss_to_local/odometry'
         else:
             odom_topic = '/ego_racecar/odom'
 
@@ -147,9 +111,9 @@ class NMPCPlannerNode(Node):
         self.planner = NMPCPlanner(track = self.track, config=self.config, debug=False)
         
         
-        waypointx = self.track.raceline.xs[waypoint_first:waypoint_num]
-        waypointy = self.track.raceline.ys[waypoint_first:waypoint_num]
-        waypointyaw = self.track.raceline.yaws[waypoint_first:waypoint_num] #+ np.pi / 2.0
+        waypointx = self.track.raceline.xs[:waypoint_num]
+        waypointy = self.track.raceline.ys[:waypoint_num]
+        waypointyaw = self.track.raceline.yaws[:waypoint_num]
         self.waypoints = np.column_stack((waypointx, waypointy, waypointyaw))
         
         ##setup a timer callpacl to publish waypoints as markers
@@ -240,9 +204,9 @@ class NMPCPlannerNode(Node):
         ref_traj_yaw = ref_traj_frenet[4,:]
        
         ref_waypoints = np.column_stack((ref_traj_x, ref_traj_y, ref_traj_yaw))
-        # self.ref_traj_plot.setData(ref_traj_x, ref_traj_y)
+        self.ref_traj_plot.setData(ref_traj_x, ref_traj_y)
         
-        self.publish_waypoints_as_markers(ref_waypoints, True)
+        # self.publish_waypoints_as_markers(ref_waypoints, False)
 
     
     def publish_control(self):
@@ -255,26 +219,8 @@ class NMPCPlannerNode(Node):
 
         print("gnss speed: ", self.gnss_speed, "drive topic speed: ", self.drive_msg.drive.speed)
 
+        
     
-    def real_world_data_transform(self, odom_msg):
-        if self.initial_x==None or self.initial_y==None:
-            self.initial_x = odom_msg.pose.pose.position.x
-            self.initial_y = odom_msg.pose.pose.position.y
-            print(f"Initial pose on real car: {self.initial_x}, {self.initial_y}")
-        
-        position = odom_msg.pose.pose.position
-        position.x = position.x - self.initial_x
-        position.y = position.y - self.initial_y
-        
-        curr_quat = odom_msg.pose.pose.orientation
-        yaw = math.atan2(2 * (curr_quat.w * curr_quat.z + curr_quat.x * curr_quat.y),
-                            1 - 2 * (curr_quat.y ** 2 + curr_quat.z ** 2))
-        yaw += math.pi
-        linear_vel_x = -1 * odom_msg.twist.twist.linear.x
-        linear_vel_y = -1 * odom_msg.twist.twist.linear.y 
-
-
-
     # def state_callback(self, ackerman_msg, odom_msg):
     def state_callback(self, odom_msg):
         """
@@ -297,7 +243,7 @@ class NMPCPlannerNode(Node):
                               1 - 2 * (curr_quat.y ** 2 + curr_quat.z ** 2))
             yaw += math.pi
             linear_vel_x = -1 *odom_msg.twist.twist.linear.x
-            linear_vel_y = -1 * odom_msg.twist.twist.linear.y 
+            linear_vel_y = -1 * odom_msg.twist.twist.linear.y # Tomorrow we will fix here
         else:
             # steering_angle = ackerman_msg.drive.steering_angle
             # Extract the pose from the Odometry message
@@ -348,7 +294,7 @@ class NMPCPlannerNode(Node):
         try:
             accl, steerv = self.planner.plan(state_dict, self.mu)
             print('done planning')
-            self.render_mpc_sol()
+            # self.render_mpc_sol()
         except Exception as e:
             print('error planning', e)
                 
@@ -356,7 +302,7 @@ class NMPCPlannerNode(Node):
         
         # integrate steerv to get steering angle and integrate accl to get speed us dt =0.1
         dt = self.planner.config.DTK
-        # print('dt', dt)
+        print('dt', dt)
         self.steering_angle = self.steering_angle + steerv * dt
         linear_vel_x = linear_vel_x + accl * dt
         self.speed = linear_vel_x

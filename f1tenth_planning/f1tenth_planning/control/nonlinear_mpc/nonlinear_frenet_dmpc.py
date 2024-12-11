@@ -13,18 +13,18 @@ import casadi as ca
 class mpc_config:
     NXK: int = 7  # length of dynamic state vector: z = [s, ey, delta, vx, vy, wz, eyaw]
     NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
-    TK: int = 5  # finite time horizon length
+    TK: int = 8  # finite time horizon length
     Rk: list = field(
-        default_factory=lambda: np.diag([0.01, 2.0])
+        default_factory=lambda: np.diag([1.0, 0.20])
     )  # input cost matrix, penalty for inputs - [accel, steering_speed]
     Rdk: list = field(
-        default_factory=lambda: np.diag([0.01, 2.0])
+        default_factory=lambda: np.diag([1.0, 0.20])
     )  # input difference cost matrix, penalty for change of inputs - [accel, steering_speed]
     Qk: list = field(
-        default_factory=lambda: np.diag([0.0, 35.0, 0.0, 5.0, 5.0, 0.0, 55.0])
+        default_factory=lambda: np.diag([0.0, 15.0, 0.0, 1.0, 0.0, 0.0, 20.0])
     )  # state error cost matrix, for the the next (T) prediction time steps [s, ey, delta, vx, vy, wz, eyaw]
     Qfk: list = field(
-        default_factory=lambda: np.diag([0.0, 35.0, 0.0, 5.0, 5.0, 0.0, 55.0])
+        default_factory=lambda: np.diag([0.0, 15.0, 0.0, 1.0, 0.0, 0.0, 20.0])
     )  # final state error matrix, penalty  for the final state constraints: [s, ey, delta, vx, vy, wz, eyaw]
 
 
@@ -178,16 +178,12 @@ class NMPCPlanner:
         ref_traj[0, :] = cx[ind_list]
         ref_traj[1, :] = cy[ind_list]
         ref_traj[3, :] = sp[ind_list]
-        # cyaw[cyaw - state["pose_theta"] > 4.5] = np.abs(
-        #     cyaw[cyaw - state["pose_theta"] > 4.5] - (2 * np.pi) - np.pi / 2.0
-        # )
-        # cyaw[cyaw - state["pose_theta"] < -4.5] = np.abs(
-        #     cyaw[cyaw - state["pose_theta"] < -4.5] + (2 * np.pi) - np.pi /2.00
-        # )
-
-        # Trying different head wrap
-        cyaw = np.arctan2(np.sin(cyaw - state["pose_theta"]), np.cos(cyaw - state["pose_theta"])) + state["pose_theta"]
-
+        cyaw[cyaw - state["pose_theta"] > 4.5] = np.abs(
+            cyaw[cyaw - state["pose_theta"] > 4.5] #- (2 * np.pi)
+        )
+        cyaw[cyaw - state["pose_theta"] < -4.5] = np.abs(
+            cyaw[cyaw - state["pose_theta"] < -4.5] #+ (2 * np.pi)
+        )
         ref_traj[4, :] = cyaw[ind_list]
 
         return ref_traj
@@ -310,15 +306,12 @@ class NMPCPlanner:
         # state constraints
         self.opti.subject_to(self.X[2, :] > self.config.MIN_STEER)
         self.opti.subject_to(self.X[2, :] < self.config.MAX_STEER)
-        self.opti.subject_to(self.X[3, :] > self.config.MIN_SPEED)
-        self.opti.subject_to(self.X[3, :] < self.config.MAX_SPEED)
-
         # solver
         jit_options = {"flags": ["-O3"], "verbose": True, "compiler":"ccache gcc", "temp_suffix":False}
         ipopt_opts = {
             "ipopt": {
                 "print_level": 1,
-                "max_iter": 5000,
+                "max_iter": 1000,
                 "acceptable_tol": 1e-6,
                 "acceptable_obj_change_tol": 1e-4,
                 "warm_start_init_point": "yes",
@@ -391,10 +384,10 @@ class NMPCPlanner:
         self.ox = x_sol[0, :].flatten()
         self.oy = x_sol[1, :].flatten()
         # TODO convert back to cartesian
-        for i, (s, ey) in enumerate(zip(self.ox, self.oy)):
-            curr_x, curr_y, _ = self.track.frenet_to_cartesian(s, ey, 0.0, use_raceline=True)
-            self.ox[i] = curr_x
-            self.oy[i] = curr_y
+        # for i, (s, ey) in enumerate(zip(self.ox, self.oy)):
+        #     curr_x, curr_y, _ = self.track.frenet_to_cartesian(s, ey, 0.0, use_raceline=True)
+        #     self.ox[i] = curr_x
+        #     self.oy[i] = curr_y
 
         return self.oa[0], self.odelta_v[0]
 
