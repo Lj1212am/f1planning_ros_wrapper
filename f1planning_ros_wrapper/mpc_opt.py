@@ -305,35 +305,36 @@ class MPC(Node):
         super().__init__('mpc_node')
         self.plot = True
 
-        self.real_car = False
+        self.real_car = True
         self.config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
         
 
 
         # for trajectory csv files:
         # self.csv = "interpolated_trajectory_3.csv"
-        self.csv = 'corrected_right_slalom_trajectory.csv'
+        # self.csv = 'wp_20241125_132733.csv'
         # self.csv = 'interpolated_wp.csv'
+        self.csv = 'slalom_raceline.csv'
         self.map_name = os.path.join(self.config_path, self.csv)
-        # self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
-        # self.waypoints = np.loadtxt(self.map_name, delimiter=',', skiprows=1) 
+        self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
 
 
-        # self.waypoints = self.waypoints[:-10,:]
-        # self.waypoints[:, 3] += math.pi/2
-        # self.waypoints[:, 3] = np.unwrap(self.waypoints[:, 3])
-        # self.sin_yaw = np.sin(self.waypoints[:, 3])
-        # self.cos_yaw = np.cos(self.waypoints[:, 3])
+        WAYPOINTS_END = -1
+        self.waypoints = self.waypoints[:WAYPOINTS_END,:]
+        self.waypoints[:, 3] += math.pi/2
+        self.waypoints[:, 3] = np.unwrap(self.waypoints[:, 3])
+        self.sin_yaw = np.sin(self.waypoints[:, 3])
+        self.cos_yaw = np.cos(self.waypoints[:, 3])
 
         # for waypoint csv files:
-        self.waypoints = np.loadtxt(self.map_name, delimiter=',', skiprows=1) 
+        # waypoints = np.loadtxt(self.map_name, delimiter=',', skiprows=1) 
 
         # waypoint_x = waypoints[:, 0]
         # waypoint_y = waypoints[:, 1]
         # waypoint_z = waypoints[:, 2]
         # waypoint_v = waypoints[:, 3]
         # self.waypoints = np.column_stack((np.ones(waypoint_x.shape), waypoint_x, waypoint_y, np.ones(waypoint_x.shape), np.ones(waypoint_x.shape), waypoint_v))
-        
+
 
         
 
@@ -343,8 +344,7 @@ class MPC(Node):
 
         drive_topic = '/drive'
         if self.real_car:
-            odom_topic = "/transformed/odometry"
-            # odom_topic = '/gnss_to_local/local_position'
+            odom_topic = '/gnss_to_local/local_position'
         else:
             odom_topic = '/ego_racecar/odom'
 
@@ -359,6 +359,7 @@ class MPC(Node):
         self.pub_drive = self.create_publisher(AckermannDriveStamped, drive_topic, 1)
         self.drive_msg = AckermannDriveStamped()
         self.config = mpc_config()
+        self.config.dlk = np.linalg.norm(self.waypoints[0, 1:3] - self.waypoints[1, 1:3])
         self.odelta_v = None
         self.odelta = None
         self.oa = None
@@ -401,7 +402,7 @@ class MPC(Node):
             self.plot.addItem(self.current_location_plot)
             self.plot.addItem(self.predict_traj_plot)
 
-            self.waypoints_plot.setData([{'pos': (wp[0], wp[1]), 'data': 1} for wp in self.waypoints])
+            self.waypoints_plot.setData([{'pos': (wp[1], wp[2]), 'data': 1} for wp in self.waypoints])
 
             self.points = []
             self.current_point = []
@@ -429,8 +430,7 @@ class MPC(Node):
     def pose_callback(self, pose_msg):
         print("pose callback")
         vehicle_state = self.get_vehicle_state(pose_msg)
-        velocity = np.ones_like(self.waypoints[:, 0]) * 3.0
-        ref_path = self.calc_ref_trajectory(vehicle_state, self.waypoints[:, 0], self.waypoints[:, 1], self.waypoints[:,2], velocity)
+        ref_path = self.calc_ref_trajectory(vehicle_state, self.waypoints[:, 1], self.waypoints[:, 2], self.waypoints[:,3], self.waypoints[:, 5])
        
         ref_path_local = transform_ref_traj_to_local_frame(ref_path, vehicle_state.x, vehicle_state.y, vehicle_state.yaw)
         
@@ -760,7 +760,7 @@ class MPC(Node):
         # yaw_diff = cyaw_continuous - state.yaw
         # cyaw_continuous -= np.where(yaw_diff > angle_thres, 2 * np.pi, 0)
         # cyaw_continuous += np.where(yaw_diff < -angle_thres, 2 * np.pi, 0)
-        cyaw_continuous = self.waypoints[:, 2]  # Use the unwrapped yaw angles directly
+        cyaw_continuous = self.waypoints[:, 3]  # Use the unwrapped yaw angles directly
 
 
         ref_traj[3, :] = cyaw_continuous[ind_list]
