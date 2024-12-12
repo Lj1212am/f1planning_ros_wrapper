@@ -3,6 +3,7 @@
 import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Odometry
+from geometry_msgs.msg import PoseWithCovarianceStamped
 import math
 
 class OdometryTransformer(Node):
@@ -28,12 +29,19 @@ class OdometryTransformer(Node):
             '/transformed/odometry',
             10)
 
+        self.pose_pub = self.create_publisher(
+            PoseWithCovarianceStamped,
+            '/transformed/pose',
+            10
+
+        )
         # Timer for publishing at a fixed rate (30 Hz)
         self.publish_rate_hz = 30.0
         self.timer = self.create_timer(1.0 / self.publish_rate_hz, self.timer_callback)
 
         # Store the last transformed message
         self.last_transformed_msg = None
+        self.last_pose_msg = None
 
     def odom_callback(self, msg):
         # Transform the incoming odometry message
@@ -61,6 +69,7 @@ class OdometryTransformer(Node):
         new_q = self.yaw_to_quaternion(yaw)
         transformed_msg.pose.pose.orientation = new_q
 
+
         # Transform linear velocities
         transformed_msg.twist.twist.linear.x = -msg.twist.twist.linear.x
         transformed_msg.twist.twist.linear.y = -msg.twist.twist.linear.y
@@ -76,12 +85,24 @@ class OdometryTransformer(Node):
         # Store the transformed message
         self.last_transformed_msg = transformed_msg
 
+        # Create and store the PoseWithCovarianceStamped message
+        pose_cov_stmp = PoseWithCovarianceStamped()
+        pose_cov_stmp.header = transformed_msg.header
+        pose_cov_stmp.pose = transformed_msg.pose
+        self.last_pose_msg = pose_cov_stmp
+
     def timer_callback(self):
         # Publish the last transformed message at a fixed rate
         if self.last_transformed_msg is not None:
             # Update the timestamp
             self.last_transformed_msg.header.stamp = self.get_clock().now().to_msg()
             self.publisher_.publish(self.last_transformed_msg)
+            self.pose_pub.publish(self.last_pose_msg)
+
+            # Publish the last PoseWithCovarianceStamped message
+        if self.last_pose_msg is not None:
+            self.last_pose_msg.header.stamp = self.get_clock().now().to_msg()
+            self.pose_pub.publish(self.last_pose_msg)
         else:
             # No message has been received yet; you may choose to log or handle this case
             pass
