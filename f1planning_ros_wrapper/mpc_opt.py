@@ -303,7 +303,7 @@ def calculate_dynamic_yaw(cx, cy):
 class MPC(Node):
     def __init__(self):
         super().__init__('mpc_node')
-        self.plot = True
+        self.plot = False
 
         self.real_car = True
         self.config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
@@ -320,11 +320,14 @@ class MPC(Node):
 
 
         WAYPOINTS_END = -1
+        WAYPOINTS_SCALE = 3.0
         self.waypoints = self.waypoints[:WAYPOINTS_END,:]
         self.waypoints[:, 3] += math.pi/2
         self.waypoints[:, 3] = np.unwrap(self.waypoints[:, 3])
+        self.waypoints[:, 1:3] *= WAYPOINTS_SCALE
         self.sin_yaw = np.sin(self.waypoints[:, 3])
         self.cos_yaw = np.cos(self.waypoints[:, 3])
+        
 
         # for waypoint csv files:
         # waypoints = np.loadtxt(self.map_name, delimiter=',', skiprows=1) 

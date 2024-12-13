@@ -40,22 +40,22 @@ class NMPCPlannerNode(Node):
     def __init__(self):
         super().__init__('nmpc_planner_node')
         self.plot = False
-        self.real_car = False
+        self.real_car = True
         self.config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
         
-        self.csv = "right_slalom_trajectory.csv"
+        self.csv = "slalom_raceline.csv"
         self.map_name = os.path.join(self.config_path, self.csv)
-        # self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
-        self.waypoints = np.loadtxt(self.map_name, delimiter=',', skiprows=1) 
+        self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
+        # self.waypoints = np.loadtxt(self.map_name, delimiter=',', skiprows=1) 
         
         # self.waypoints[:, 3] += math.pi/2
         # self.sin_yaw = np.sin(self.waypoints[:, 3])
         # self.cos_yaw = np.cos(self.waypoints[:, 3])
         
-        # x = self.waypoints[:, 1]
-        # y = self.waypoints[:, 2]
-        x = self.waypoints[:, 0] * 3.0
-        y = self.waypoints[:, 1] * 3.0
+        x = self.waypoints[:, 1] * 3.0
+        y = self.waypoints[:, 2] * 3.0
+        # x = self.waypoints[:, 0] * 3.0
+        # y = self.waypoints[:, 1] * 3.0
         # velx = self.waypoints[:, 2]
         # vely = self.waypoints[:, 3]
         
@@ -71,8 +71,8 @@ class NMPCPlannerNode(Node):
         
         drive_topic = '/drive'
         if self.real_car:
-            # odom_topic = '/transformed/odometry'
-            odom_topic = '/gnss_to_local/odometry'
+            odom_topic = '/transformed/odometry'
+            # odom_topic = '/gnss_to_local/odometry'
         else:
             odom_topic = '/ego_racecar/odom'
 
@@ -91,19 +91,12 @@ class NMPCPlannerNode(Node):
 
         self.sub_odom = self.create_subscription(Odometry, odom_topic, self.state_callback, 1)
         
-        
         # self.sub_odom = self.create_subscription(Odometry, odom_topic, self.state_callback, 1)
         self.sub_ackermann = self.create_subscription(AckermannDriveStamped, drive_topic, self.ackerman_callback, 1)
         self.pub_drive = self.create_publisher(AckermannDriveStamped, drive_topic, 1)
         # self.pub_mpc_sol = self.create_publisher(Marker, 'mpc_solution', 10)
         self.sub_mu = self.create_subscription(Float32, 'friction_value', self.friction_callback, 10) 
-        # Publisher for visualizing waypoints as MarkerArray
-        
-        self.marker_pub = self.create_publisher(MarkerArray, 'waypoints_markers', 10)
-        
-        #Create a timer publisher for planning
-        # self.timer = self.create_timer(0.1, self.publish_control)
-        
+
         # Initialize the NMPCPlanner with default parameters
         print('setting config')
         self.config = mpc_config()
@@ -115,15 +108,9 @@ class NMPCPlannerNode(Node):
         waypointy = self.track.raceline.ys[:waypoint_num]
         waypointyaw = self.track.raceline.yaws[:waypoint_num]
         self.waypoints = np.column_stack((waypointx, waypointy, waypointyaw))
+        WAYPOINTS_SUBSAMPLE_STEP = 10
+        self.waypoints = self.waypoints[::WAYPOINTS_SUBSAMPLE_STEP, :]
         
-        ##setup a timer callpacl to publish waypoints as markers
-        self.timer = self.create_timer(0.1, self.publish_waypoints_as_markers)
-        
-        #sleep for 1 second to allow the publisher to publish waypoints
-        time.sleep(1)
-        self.publish_waypoints_as_markers(self.waypoints)
-        
-
         
         self.old_steerv = 0.0
         self.old_accl = 0.0
@@ -206,22 +193,6 @@ class NMPCPlannerNode(Node):
         ref_waypoints = np.column_stack((ref_traj_x, ref_traj_y, ref_traj_yaw))
         self.ref_traj_plot.setData(ref_traj_x, ref_traj_y)
         
-        # self.publish_waypoints_as_markers(ref_waypoints, False)
-
-    
-    def publish_control(self):
-        
-        pass
-
-    def gnss_callback(self, nav_msg):
-        self.gnss_vel_x = -nav_msg.twist.twist.linear.x
-        self.gnss_vel_y = -nav_msg.twist.twist.linear.y
-
-        print("gnss speed: ", self.gnss_speed, "drive topic speed: ", self.drive_msg.drive.speed)
-
-        
-    
-    # def state_callback(self, ackerman_msg, odom_msg):
     def state_callback(self, odom_msg):
         """
         Callback for Odometry updates, processes the current pose and sends it to the NMPC planner.
@@ -289,11 +260,9 @@ class NMPCPlannerNode(Node):
         #     steerv = 1.0
         # else:
         # Plan using the NMPC planner
-        print('abt to plan so hard')
         
         try:
             accl, steerv = self.planner.plan(state_dict, self.mu)
-            print('done planning')
             # self.render_mpc_sol()
         except Exception as e:
             print('error planning', e)
@@ -324,70 +293,6 @@ class NMPCPlannerNode(Node):
             # Update real trajectory
             points_array = np.array(self.points)
             self.trajectory_plot.setData(points_array[:, 0], points_array[:, 1])
-
-            
-        
-        
-    
-    def publish_waypoints_as_markers(self, waypoints=None, ref=False):
-        """ Publish waypoints as visualization markers in RViz """
-        marker_array = MarkerArray()
-        
-        if waypoints is None:
-            waypoints = self.waypoints
-
-        # Create markers for first 20 waypoints
-        # print('num waypoints', len(waypoints))
-        for i, waypoint in enumerate(waypoints[:waypoint_num]):
-        # for i, waypoint in enumerate(self.waypoints):
-            marker = Marker()
-            marker.header.frame_id = "map"  # Set appropriate frame ID
-            marker.type = Marker.ARROW
-            marker.action = Marker.ADD
-            marker.id = i  # Each marker needs a unique ID
-            marker.id = i + 1000  # Each marker needs a unique ID
-            marker.scale.x = 1.0  # Arrow length
-            marker.scale.y = 0.2  # Arrow width
-            marker.scale.z = 0.2  # Arrow height
-            if ref:
-                marker.id = i + 1000  # Each marker needs a unique ID
-                marker.scale.x = 1.0  # Arrow length
-                marker.scale.y = 0.2  # Arrow width
-                marker.scale.z = 0.2  # Arrow height
-
-            # Set waypoint positions and orientations
-            marker.pose.position.x = float(waypoint[0])  # x-coordinate
-            marker.pose.position.y = float(waypoint[1])  # y-coordinate
-            marker.pose.position.z = 0.2  # z-coordinate (flat 2D track)
-
-            # Convert yaw to quaternion for orientation
-            yaw = float(waypoint[2])  # yaw angle
-            q = self.yaw_to_quaternion(yaw)
-            marker.pose.orientation.x = q[0]
-            marker.pose.orientation.y = q[1]
-            marker.pose.orientation.z = q[2]
-            marker.pose.orientation.w = q[3]
-
-            # Set the color of the marker
-            if ref:
-                marker.color.a = 1.0
-                marker.color.r = 0.0
-                marker.color.g = 1.0
-                marker.color.b = 0.0
-            else:
-                marker.color.a = 1.0  # Alpha
-                marker.color.r = 1.0
-                marker.color.g = 0.0
-                marker.color.b = 1.0
-                
-                
-            
-
-            # Append to the marker array
-            marker_array.markers.append(marker)
-
-        # Publish the MarkerArray
-        self.marker_pub.publish(marker_array)
         
     def quaternion_to_euler(self, orientation):
         """

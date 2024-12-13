@@ -13,7 +13,7 @@ import casadi as ca
 class mpc_config:
     NXK: int = 7  # length of dynamic state vector: z = [s, ey, delta, vx, vy, wz, eyaw]
     NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
-    TK: int = 8  # finite time horizon length
+    TK: int = 5  # finite time horizon length
     Rk: list = field(
         default_factory=lambda: np.diag([1.0, 0.20])
     )  # input cost matrix, penalty for inputs - [accel, steering_speed]
@@ -311,7 +311,7 @@ class NMPCPlanner:
         ipopt_opts = {
             "ipopt": {
                 "print_level": 1,
-                "max_iter": 1000,
+                "max_iter": 100,
                 "acceptable_tol": 1e-6,
                 "acceptable_obj_change_tol": 1e-4,
                 "warm_start_init_point": "yes",
