@@ -1,6 +1,7 @@
 # kinematic mpc that follows the mincurv optimized trajectory in L shape track
 # This code uses fixposition (GNSS) to get the current longitudinal velocity of the robot instead of the drive command
 
+import csv
 import math
 import signal
 import time
@@ -307,6 +308,24 @@ class MPC(Node):
 
         self.real_car = True
         self.config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
+
+        self.declare_parameter('csv_suffix', 'kin_mpc')
+
+        # Get the CSV suffix from the parameter
+        csv_suffix = self.get_parameter('csv_suffix').get_parameter_value().string_value
+
+
+        self.csv_path = "/home/nvidia/ros_ws/src/f1-fifth/src/f1planning_ros_wrapper/real_world_results"
+        self.output_csv_file = f"cross_track_error_log_{csv_suffix}.csv"
+
+        self.output_csv_path = os.path.join(self.csv_path, self.output_csv_file)
+
+        with open(self.output_csv_path, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(["timestamp", "cross_track_error", "current_velocity", "goal_velocity", "x_m", "y_m"])
+        
+        self.csv_file = open(self.output_csv_path, 'a', newline='')
+        self.csv_writer = csv.writer(self.csv_file)
         
 
 
@@ -348,11 +367,14 @@ class MPC(Node):
         drive_topic = '/drive'
         if self.real_car:
             odom_topic = '/gnss_to_local/local_position'
+            # odom_topic = '/transformed/odometry'
         else:
             odom_topic = '/ego_racecar/odom'
 
         if self.real_car:
             self.sub_pose = self.create_subscription(PoseWithCovarianceStamped, odom_topic, self.pose_callback, 1)
+            # self.sub_pose = self.create_subscription(Odometry, odom_topic, self.pose_callback, 1)
+
             self.gnss = self.create_subscription(Odometry, '/fixposition/odometry', self.gnss_callback, 1)
         else:
             self.sub_pose = self.create_subscription(Odometry, odom_topic, self.pose_callback, 1)
@@ -431,12 +453,18 @@ class MPC(Node):
     #         print(f"Initial pose on simulation: {self.initial_x}, {self.initial_y}")
 
     def pose_callback(self, pose_msg):
-        print("pose callback")
         vehicle_state = self.get_vehicle_state(pose_msg)
         ref_path = self.calc_ref_trajectory(vehicle_state, self.waypoints[:, 1], self.waypoints[:, 2], self.waypoints[:,3], self.waypoints[:, 5])
        
         ref_path_local = transform_ref_traj_to_local_frame(ref_path, vehicle_state.x, vehicle_state.y, vehicle_state.yaw)
         
+        # Calculate Cross-Track Error (CTE)
+        self.cte, _, _ = get_dists_to_point_on_trajectory(
+            np.array([vehicle_state.x, vehicle_state.y]), 
+            np.column_stack((ref_path[0, :], ref_path[1, :]))
+        )
+        self.current_velocity = vehicle_state.v
+        goal_velocity = ref_path[2,0]
 
         x0 = [0, 0, vehicle_state.v, 0]
         (
@@ -448,6 +476,17 @@ class MPC(Node):
             ov,
             state_predict,
         ) = self.linear_mpc_control(ref_path_local, x0, self.oa, self.odelta_v)
+
+
+        self.csv_writer.writerow([
+                time.time(),  # Timestamp
+                self.cte,  # Cross-Track Error
+                self.current_velocity,  # Current Velocity
+                goal_velocity,  # Goal Velocity
+                vehicle_state.x,
+                vehicle_state.y,
+            ])
+        self.csv_file.flush()
 
 
         steer_output = self.odelta_v[0]

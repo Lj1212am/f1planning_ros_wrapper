@@ -92,6 +92,9 @@ class NMPCPlanner:
         self.ox = None
         self.oy = None
         self.ref_path = None
+        self.ey = None
+        self.curr_vel = None
+        self.goal_vel = None
         self.debug = debug
         self.mpc_prob_init()
 
@@ -333,7 +336,11 @@ class NMPCPlanner:
             current_state["pose_theta"],
             use_raceline=True,
         )
-        print("epsi ", epsi)
+
+        self.ey = ey
+        self.curr_vel = current_state["linear_vel_x"]
+        self.goal_vel = goal_state[3]
+        
 
         current_state_vec = ca.vertcat(
             s,

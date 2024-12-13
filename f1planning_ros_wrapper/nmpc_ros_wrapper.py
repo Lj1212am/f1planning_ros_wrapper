@@ -1,3 +1,4 @@
+import csv
 import signal
 import time
 import rclpy
@@ -41,6 +42,9 @@ class NMPCPlannerNode(Node):
         super().__init__('nmpc_planner_node')
         self.plot = False
         self.real_car = True
+        # Declare a ROS parameter for the output CSV file name suffix
+        self.declare_parameter('csv_suffix', 'nmpc')
+
         self.config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
         
         self.csv = "slalom_raceline.csv"
@@ -68,10 +72,25 @@ class NMPCPlannerNode(Node):
         # self.track = Track.from_refline(x[10:waypoint_num], y[10:waypoint_num], v[10:waypoint_num])
         self.track = Track.from_refline(x, y, v)
         # Initialize Subscribers / Publishers for the controller
+
+        # Get the CSV suffix from the parameter
+        csv_suffix = self.get_parameter('csv_suffix').get_parameter_value().string_value
+
+        # Construct the output CSV file name
+        self.csv_path = "/home/nvidia/ros_ws/src/f1-fifth/src/f1planning_ros_wrapper/real_world_results"
+        self.output_csv_file = f"cross_track_error_log_{csv_suffix}.csv"
+
+        self.output_csv_path = os.path.join(self.csv_path, self.output_csv_file)
+        
+        # Open the CSV file and write the header
+        self.csv_file = open(self.output_csv_path, mode='w', newline='')
+        self.csv_writer = csv.writer(self.csv_file)
+        self.csv_writer.writerow(["timestamp", "cross_track_error", "current_velocity", "goal_velocity"])
+        self.get_logger().info(f'Initialized CSV logging at {self.output_csv_path}')
         
         drive_topic = '/drive'
         if self.real_car:
-            #odom_topic = '/transformed/odometry'
+            # odom_topic = '/transformed/odometry'
             odom_topic = '/gnss_to_local/odometry'
         else:
             odom_topic = '/ego_racecar/odom'
@@ -264,14 +283,24 @@ class NMPCPlannerNode(Node):
         try:
             accl, steerv = self.planner.plan(state_dict, self.mu)
             # self.render_mpc_sol()
+
+            # Log the cross-track error to the CSV file
+            current_time = self.get_clock().now().to_msg()
+            timestamp = f"{current_time.sec}.{current_time.nanosec}"
+            cross_track_error = self.planner.ey  # Access the cross-track error
+            current_velocity = self.planner.curr_vel  # Access the current velocity
+            goal_velocity = self.planner.goal_vel  # Access the goal velocity
+            self.csv_writer.writerow([timestamp, cross_track_error, current_velocity, goal_velocity])
+            self.csv_file.flush()  # Ensure data is written to disk
+            self.get_logger().info(f'Logged data: CTE={cross_track_error}, Curr_Vel={current_velocity}, Goal_Vel={goal_velocity}')
+        
         except Exception as e:
-            print('error planning', e)
+            self.get_logger().error(f'Error in planning: {e}')
                 
             
         
         # integrate steerv to get steering angle and integrate accl to get speed us dt =0.1
         dt = self.planner.config.DTK
-        print('dt', dt)
         self.steering_angle = self.steering_angle + steerv * dt
         linear_vel_x = linear_vel_x + accl * dt
         self.speed = linear_vel_x
