@@ -21,10 +21,10 @@ class mpc_config:
         default_factory=lambda: np.diag([1.0, 0.20])
     )  # input difference cost matrix, penalty for change of inputs - [accel, steering_speed]
     Qk: list = field(
-        default_factory=lambda: np.diag([0.0, 15.0, 0.0, 1.0, 0.0, 0.0, 20.0])
+        default_factory=lambda: np.diag([0.0, 15.0, 0.0, 5.0, 0.0, 0.0, 20.0])
     )  # state error cost matrix, for the the next (T) prediction time steps [s, ey, delta, vx, vy, wz, eyaw]
     Qfk: list = field(
-        default_factory=lambda: np.diag([0.0, 15.0, 0.0, 1.0, 0.0, 0.0, 20.0])
+        default_factory=lambda: np.diag([0.0, 15.0, 0.0, 5.0, 0.0, 0.0, 20.0])
     )  # final state error matrix, penalty  for the final state constraints: [s, ey, delta, vx, vy, wz, eyaw]
 
 

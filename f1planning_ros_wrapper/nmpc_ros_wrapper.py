@@ -71,8 +71,8 @@ class NMPCPlannerNode(Node):
         
         drive_topic = '/drive'
         if self.real_car:
-            odom_topic = '/transformed/odometry'
-            # odom_topic = '/gnss_to_local/odometry'
+            #odom_topic = '/transformed/odometry'
+            odom_topic = '/gnss_to_local/odometry'
         else:
             odom_topic = '/ego_racecar/odom'
 
