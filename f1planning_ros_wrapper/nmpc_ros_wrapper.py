@@ -47,7 +47,7 @@ class NMPCPlannerNode(Node):
 
         self.config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
         
-        self.csv = "slalom_raceline.csv"
+        self.csv = "rotated_raceline_slalom_wide.csv"
         self.map_name = os.path.join(self.config_path, self.csv)
         self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
         # self.waypoints = np.loadtxt(self.map_name, delimiter=',', skiprows=1) 
@@ -56,8 +56,8 @@ class NMPCPlannerNode(Node):
         # self.sin_yaw = np.sin(self.waypoints[:, 3])
         # self.cos_yaw = np.cos(self.waypoints[:, 3])
         
-        x = self.waypoints[:, 1] * 3.0
-        y = self.waypoints[:, 2] * 3.0
+        x = self.waypoints[:, 1]  #* 2.0#+ 1.2
+        y = self.waypoints[:, 2]  #* 2.0#  1.1
         # x = self.waypoints[:, 0] * 3.0
         # y = self.waypoints[:, 1] * 3.0
         # velx = self.waypoints[:, 2]
@@ -65,7 +65,7 @@ class NMPCPlannerNode(Node):
         
         # v = np.sqrt(velx**2 + vely**2)
         # v = self.waypoints[:, 5]
-        v = np.ones_like(x) * 3.0
+        v = np.ones_like(x)  * 2.0
         
         
         # Now pass the processed x, y, and velx to the Track class
@@ -90,13 +90,13 @@ class NMPCPlannerNode(Node):
         
         drive_topic = '/drive'
         if self.real_car:
-            # odom_topic = '/transformed/odometry'
-            odom_topic = '/gnss_to_local/odometry'
+            odom_topic = '/transformed/odometry'
+            # odom_topic = '/gnss_to_local/odometry'
         else:
             odom_topic = '/ego_racecar/odom'
 
-        self.initial_x = None
-        self.initial_y = None
+        self.initial_x = None #0.0 #None
+        self.initial_y = None#0.0 #None
         
         # if self.real_car:
         #     self.initial_x = 0.0 #1118.0

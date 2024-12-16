@@ -15,10 +15,10 @@ class mpc_config:
     NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
     TK: int = 5  # finite time horizon length
     Rk: list = field(
-        default_factory=lambda: np.diag([1.0, 0.20])
+        default_factory=lambda: np.diag([1.0, 1.0])
     )  # input cost matrix, penalty for inputs - [accel, steering_speed]
     Rdk: list = field(
-        default_factory=lambda: np.diag([1.0, 0.20])
+        default_factory=lambda: np.diag([1.0, 1.0])
     )  # input difference cost matrix, penalty for change of inputs - [accel, steering_speed]
     Qk: list = field(
         default_factory=lambda: np.diag([0.0, 15.0, 0.0, 5.0, 0.0, 0.0, 20.0])
@@ -428,6 +428,8 @@ class NMPCPlanner:
         # Goal state is the last point's velocity and all zeros for the other states (s, ey, delta, vx, vy, wz, epsi, curv)
         goal_state = ca.vertcat(
             0.0, 0.0, 0.0, self.ref_path[3][-1], 0.0, 0.0, 0.0, self.ref_path[5][0], mu
+            # 0.0, 0.0, 0.0, 2.5, 0.0, 0.0, 0.0, self.ref_path[5][0], mu
+        
         )
         
 

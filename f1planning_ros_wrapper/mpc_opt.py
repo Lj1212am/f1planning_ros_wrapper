@@ -304,7 +304,7 @@ def calculate_dynamic_yaw(cx, cy):
 class MPC(Node):
     def __init__(self):
         super().__init__('mpc_node')
-        self.plot = False
+        self.plot = True
 
         self.real_car = True
         self.config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
@@ -333,14 +333,15 @@ class MPC(Node):
         # self.csv = "interpolated_trajectory_3.csv"
         # self.csv = 'wp_20241125_132733.csv'
         # self.csv = 'interpolated_wp.csv'
-        self.csv = 'slalom_raceline.csv'
+        self.csv = 'rotated_raceline_slalom_wide.csv'
         self.map_name = os.path.join(self.config_path, self.csv)
         self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
 
 
         WAYPOINTS_END = -1
-        WAYPOINTS_SCALE = 3.0
+        WAYPOINTS_SCALE = 1.0
         self.waypoints = self.waypoints[:WAYPOINTS_END,:]
+        self.waypoints[:, 0] += 1.2 
         self.waypoints[:, 3] += math.pi/2
         self.waypoints[:, 3] = np.unwrap(self.waypoints[:, 3])
         self.waypoints[:, 1:3] *= WAYPOINTS_SCALE
@@ -390,8 +391,8 @@ class MPC(Node):
         self.oa = None
         self.init_flag = 0
 
-        self.initial_x = None
-        self.initial_y = None
+        self.initial_x = 0.0 # None
+        self.initial_y = 0.0 #None
         self.gnss_speed = 0
         if self.real_car:
 
@@ -454,7 +455,8 @@ class MPC(Node):
 
     def pose_callback(self, pose_msg):
         vehicle_state = self.get_vehicle_state(pose_msg)
-        ref_path = self.calc_ref_trajectory(vehicle_state, self.waypoints[:, 1], self.waypoints[:, 2], self.waypoints[:,3], self.waypoints[:, 5])
+        velocity = self.waypoints[:, 5] * 3.0
+        ref_path = self.calc_ref_trajectory(vehicle_state, self.waypoints[:, 1], self.waypoints[:, 2], self.waypoints[:,3], velocity)
        
         ref_path_local = transform_ref_traj_to_local_frame(ref_path, vehicle_state.x, vehicle_state.y, vehicle_state.yaw)
         

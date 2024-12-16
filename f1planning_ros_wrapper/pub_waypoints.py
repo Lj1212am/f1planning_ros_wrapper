@@ -24,12 +24,12 @@ class WaypointPublisher(Node):
         self.timer = self.create_timer(0.1, self.publish_waypoints_as_markers)
         self.marker_pub = self.create_publisher(MarkerArray, 'waypoints_markers', 10)
         
-        self.csv = "slalom_raceline.csv"
+        self.csv = "rotated_raceline_slalom_wide.csv"
         self.map_name = os.path.join(self.config_path, self.csv)
         self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
 
-        x = self.waypoints[:, 1] * 3.0
-        y = self.waypoints[:, 2] * 3.0
+        x = self.waypoints[:, 1] #* 2.0
+        y = self.waypoints[:, 2] #* 2.0
         v = np.ones_like(x) * 3.0
         self.track = Track.from_refline(x, y, v)
         
