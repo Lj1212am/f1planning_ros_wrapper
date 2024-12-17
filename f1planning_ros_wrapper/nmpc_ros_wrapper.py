@@ -65,7 +65,7 @@ class NMPCPlannerNode(Node):
         
         # v = np.sqrt(velx**2 + vely**2)
         # v = self.waypoints[:, 5]
-        v = np.ones_like(x)  * 2.0
+        v = np.ones_like(x)  * 3.0
         
         
         # Now pass the processed x, y, and velx to the Track class
@@ -90,8 +90,8 @@ class NMPCPlannerNode(Node):
         
         drive_topic = '/drive'
         if self.real_car:
-            odom_topic = '/transformed/odometry'
-            # odom_topic = '/gnss_to_local/odometry'
+            # odom_topic = '/transformed/odometry'
+            odom_topic = '/gnss_to_local/odometry'
         else:
             odom_topic = '/ego_racecar/odom'
 
@@ -196,7 +196,7 @@ class NMPCPlannerNode(Node):
         self.steering_angle = ackerman_msg.drive.steering_angle
         
     def friction_callback(self, mu_msg):
-        self.mu = float(mu_msg.data)
+        self.mu = float(mu_msg.data) + 0.15
     
     def render_mpc_sol(self):
         """

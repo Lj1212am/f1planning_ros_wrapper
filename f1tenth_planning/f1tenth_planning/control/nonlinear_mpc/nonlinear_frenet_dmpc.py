@@ -423,7 +423,7 @@ class NMPCPlanner:
             self.waypoints[4],
         )
         if mu is None:
-            mu = 0.7
+            mu = 0.1
 
         # Goal state is the last point's velocity and all zeros for the other states (s, ey, delta, vx, vy, wz, epsi, curv)
         goal_state = ca.vertcat(
