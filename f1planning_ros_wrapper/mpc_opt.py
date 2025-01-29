@@ -306,7 +306,7 @@ class MPC(Node):
         super().__init__('mpc_node')
         self.plot = True
 
-        self.real_car = True
+        self.real_car = False
         self.config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
 
         self.declare_parameter('csv_suffix', 'kin_mpc')
@@ -315,7 +315,7 @@ class MPC(Node):
         csv_suffix = self.get_parameter('csv_suffix').get_parameter_value().string_value
 
 
-        self.csv_path = "/home/nvidia/ros_ws/src/f1-fifth/src/f1planning_ros_wrapper/real_world_results"
+        self.csv_path = "/home/nvidia/ros_ws/src/f1planning_ros_wrapper/real_world_results"
         self.output_csv_file = f"cross_track_error_log_{csv_suffix}.csv"
 
         self.output_csv_path = os.path.join(self.csv_path, self.output_csv_file)
@@ -333,7 +333,7 @@ class MPC(Node):
         # self.csv = "interpolated_trajectory_3.csv"
         # self.csv = 'wp_20241125_132733.csv'
         # self.csv = 'interpolated_wp.csv'
-        self.csv = 'rotated_raceline_slalom_wide.csv'
+        self.csv = 'rotated_safe_slalom.csv'
         self.map_name = os.path.join(self.config_path, self.csv)
         self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
 
@@ -455,7 +455,7 @@ class MPC(Node):
 
     def pose_callback(self, pose_msg):
         vehicle_state = self.get_vehicle_state(pose_msg)
-        velocity = self.waypoints[:, 5] * 3.0
+        velocity = self.waypoints[:, 5] * 5.0
         ref_path = self.calc_ref_trajectory(vehicle_state, self.waypoints[:, 1], self.waypoints[:, 2], self.waypoints[:,3], velocity)
        
         ref_path_local = transform_ref_traj_to_local_frame(ref_path, vehicle_state.x, vehicle_state.y, vehicle_state.yaw)

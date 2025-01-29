@@ -35,7 +35,7 @@ import sys
 import os
 
 # Add the path to the STMPC planner if necessary
-sys.path.append('/home/nvidia/f1-fifth/src/f1planning_ros_wrapper/f1tenth_planning')
+sys.path.append('/home/nvidia/ros_ws/src/f1planning_ros_wrapper/f1tenth_planning')
 
 from f1tenth_planning.control.kinematic_mpc.kinematic_mpc import KMPCPlanner
 from f1tenth_gym.envs.track import Track

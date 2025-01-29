@@ -10,7 +10,7 @@ import sys
 import math
 import os
 
-sys.path.append('/home/nvidia/ros_ws/src/f1-fifth/src/f1planning_ros_wrapper/f1tenth_planning')
+sys.path.append('/home/nvidia/ros_ws/src/f1planning_ros_wrapper/f1tenth_planning')
 
 #NMPC Imports
 from dataclasses import dataclass, field
@@ -41,13 +41,14 @@ class NMPCPlannerNode(Node):
     def __init__(self):
         super().__init__('nmpc_planner_node')
         self.plot = False
-        self.real_car = True
+        self.real_car = False
         # Declare a ROS parameter for the output CSV file name suffix
         self.declare_parameter('csv_suffix', 'nmpc')
 
         self.config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
         
-        self.csv = "rotated_raceline_slalom_wide.csv"
+        # self.csv = "rotated_safe_slalom.csv"
+        self.csv = "Spielberg_blank_raceline.csv"
         self.map_name = os.path.join(self.config_path, self.csv)
         self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
         # self.waypoints = np.loadtxt(self.map_name, delimiter=',', skiprows=1) 
@@ -65,7 +66,7 @@ class NMPCPlannerNode(Node):
         
         # v = np.sqrt(velx**2 + vely**2)
         # v = self.waypoints[:, 5]
-        v = np.ones_like(x)  * 3.0
+        v = np.ones_like(x)  * 5.0
         
         
         # Now pass the processed x, y, and velx to the Track class
@@ -77,7 +78,7 @@ class NMPCPlannerNode(Node):
         csv_suffix = self.get_parameter('csv_suffix').get_parameter_value().string_value
 
         # Construct the output CSV file name
-        self.csv_path = "/home/nvidia/ros_ws/src/f1-fifth/src/f1planning_ros_wrapper/real_world_results"
+        self.csv_path = "/home/nvidia/ros_ws/src/f1planning_ros_wrapper/real_world_results"
         self.output_csv_file = f"cross_track_error_log_{csv_suffix}.csv"
 
         self.output_csv_path = os.path.join(self.csv_path, self.output_csv_file)
@@ -113,7 +114,7 @@ class NMPCPlannerNode(Node):
         # self.sub_odom = self.create_subscription(Odometry, odom_topic, self.state_callback, 1)
         self.sub_ackermann = self.create_subscription(AckermannDriveStamped, drive_topic, self.ackerman_callback, 1)
         self.pub_drive = self.create_publisher(AckermannDriveStamped, drive_topic, 1)
-        # self.pub_mpc_sol = self.create_publisher(Marker, 'mpc_solution', 10)
+        self.pub_mpc_sol = self.create_publisher(Marker, 'mpc_solution', 10)
         self.sub_mu = self.create_subscription(Float32, 'friction_value', self.friction_callback, 10) 
 
         # Initialize the NMPCPlanner with default parameters
@@ -130,7 +131,10 @@ class NMPCPlannerNode(Node):
         WAYPOINTS_SUBSAMPLE_STEP = 10
         self.waypoints = self.waypoints[::WAYPOINTS_SUBSAMPLE_STEP, :]
         
-        
+        self.marker_pub = self.create_publisher(MarkerArray, 'waypoints_markers', 1)
+        # self.timer = self.create_timer(1.0, self.publish_waypoints_as_markers)
+        # self.publish_waypoints_as_markers(self.waypoints, False)
+
         self.old_steerv = 0.0
         self.old_accl = 0.0
         # Initialize placeholders
@@ -139,6 +143,13 @@ class NMPCPlannerNode(Node):
         #soft start
         # accl = 9.0
         # steer = 0.0
+        if not self.real_car:
+            drive_msg = AckermannDriveStamped()
+            drive_msg.drive.speed = 1.0
+            drive_msg.drive.steering_angle = 0.0
+            self.pub_drive.publish(drive_msg)
+
+
         self.steering_angle = 0.0
         self.speed = 0.0
         self.mu = None
@@ -210,6 +221,8 @@ class NMPCPlannerNode(Node):
         ref_traj_yaw = ref_traj_frenet[4,:]
        
         ref_waypoints = np.column_stack((ref_traj_x, ref_traj_y, ref_traj_yaw))
+        self.publish_waypoints_as_markers(ref_waypoints, False)
+        
         self.ref_traj_plot.setData(ref_traj_x, ref_traj_y)
         
     def state_callback(self, odom_msg):
@@ -322,7 +335,68 @@ class NMPCPlannerNode(Node):
             # Update real trajectory
             points_array = np.array(self.points)
             self.trajectory_plot.setData(points_array[:, 0], points_array[:, 1])
+    
+    def publish_waypoints_as_markers(self, waypoints=None, ref=False):
+        """ Publish waypoints as visualization markers in RViz """
+        marker_array = MarkerArray()
         
+        if waypoints is None:
+            waypoints = self.waypoints
+
+        # Create markers for first 20 waypoints
+        # print('num waypoints', len(waypoints))
+        for i, waypoint in enumerate(waypoints[:waypoint_num]):
+        # for i, waypoint in enumerate(self.waypoints):
+            marker = Marker()
+            marker.header.frame_id = "map"  # Set appropriate frame ID
+            marker.type = Marker.ARROW
+            marker.action = Marker.ADD
+            marker.id = i  # Each marker needs a unique ID
+            marker.id = i + 1000  # Each marker needs a unique ID
+            marker.scale.x = 1.0  # Arrow length
+            marker.scale.y = 0.2  # Arrow width
+            marker.scale.z = 0.2  # Arrow height
+            if ref:
+                marker.id = i + 1000  # Each marker needs a unique ID
+                marker.scale.x = 1.0  # Arrow length
+                marker.scale.y = 0.2  # Arrow width
+                marker.scale.z = 0.2  # Arrow height
+
+            # Set waypoint positions and orientations
+            marker.pose.position.x = float(waypoint[0])  # x-coordinate
+            marker.pose.position.y = float(waypoint[1])  # y-coordinate
+            marker.pose.position.z = 0.2  # z-coordinate (flat 2D track)
+
+            # Convert yaw to quaternion for orientation
+            yaw = float(waypoint[2])  # yaw angle
+            q = self.yaw_to_quaternion(yaw)
+            marker.pose.orientation.x = q[0]
+            marker.pose.orientation.y = q[1]
+            marker.pose.orientation.z = q[2]
+            marker.pose.orientation.w = q[3]
+
+            # Set the color of the marker
+            if ref:
+                marker.color.a = 1.0
+                marker.color.r = 0.0
+                marker.color.g = 1.0
+                marker.color.b = 0.0
+            else:
+                marker.color.a = 1.0  # Alpha
+                marker.color.r = 1.0
+                marker.color.g = 0.0
+                marker.color.b = 1.0
+                
+                
+            
+
+            # Append to the marker array
+            marker_array.markers.append(marker)
+
+        # Publish the MarkerArray
+        self.marker_pub.publish(marker_array)
+    
+
     def quaternion_to_euler(self, orientation):
         """
         Convert quaternion (from Odometry) to yaw (Euler angle).

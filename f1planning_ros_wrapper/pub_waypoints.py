@@ -7,7 +7,7 @@ import numpy as np
 import sys
 import os
 
-sys.path.append('/home/nvidia/ros_ws/src/f1-fifth/src/f1planning_ros_wrapper/f1tenth_planning')
+sys.path.append('/home/nvidia/ros_ws/src/f1planning_ros_wrapper/f1tenth_planning')
 
 #NMPC Imports
 from f1tenth_gym.envs.track import Track
@@ -24,7 +24,7 @@ class WaypointPublisher(Node):
         self.timer = self.create_timer(0.1, self.publish_waypoints_as_markers)
         self.marker_pub = self.create_publisher(MarkerArray, 'waypoints_markers', 10)
         
-        self.csv = "rotated_raceline_slalom_wide.csv"
+        self.csv = "rotated_safe_slalom.csv"
         self.map_name = os.path.join(self.config_path, self.csv)
         self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
 
