@@ -15,16 +15,16 @@ class mpc_config:
     NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
     TK: int = 5  # finite time horizon length
     Rk: list = field(
-        default_factory=lambda: np.diag([1.0, 1.0])
+        default_factory=lambda: np.diag([0.1, 0.1])
     )  # input cost matrix, penalty for inputs - [accel, steering_speed]
     Rdk: list = field(
-        default_factory=lambda: np.diag([1.0, 1.0])
+        default_factory=lambda: np.diag([0.1, 0.1])
     )  # input difference cost matrix, penalty for change of inputs - [accel, steering_speed]
     Qk: list = field(
-        default_factory=lambda: np.diag([0.0, 15.0, 0.0, 5.0, 0.0, 0.0, 20.0])
+        default_factory=lambda: np.diag([0.0, 15.0, 0.0, 5.0, 0.0, 0.0, 10.0])
     )  # state error cost matrix, for the the next (T) prediction time steps [s, ey, delta, vx, vy, wz, eyaw]
     Qfk: list = field(
-        default_factory=lambda: np.diag([0.0, 15.0, 0.0, 5.0, 0.0, 0.0, 20.0])
+        default_factory=lambda: np.diag([0.0, 15.0, 0.0, 5.0, 0.0, 0.0, 10.0])
     )  # final state error matrix, penalty  for the final state constraints: [s, ey, delta, vx, vy, wz, eyaw]
 
 
@@ -86,6 +86,20 @@ class NMPCPlanner:
                 track.raceline.vxs.copy(),
                 track.raceline.ks.copy(),
             ]
+        # import matplotlib.pyplot as plt
+        # plt.figure()
+        # plt.title("Racline yaws")
+        # plt.scatter(track.raceline.xs, track.raceline.ys, c=track.raceline.yaws)
+        # plt.colorbar()
+        # plt.figure()
+        # plt.title("Racline vxs")
+        # plt.scatter(track.raceline.xs, track.raceline.ys, c=track.raceline.vxs)
+        # plt.colorbar()
+        # plt.title("Racline ks")
+        # plt.scatter(track.raceline.xs, track.raceline.ys, c=track.raceline.ks)
+        # plt.colorbar()
+        # plt.show()
+        
         self.config = config
         self.oa = None
         self.odelta_v = None
@@ -134,7 +148,19 @@ class NMPCPlanner:
         Callback to render the lookahead point.
         """
         if self.ox is not None and self.oy is not None:
-            points = np.array([self.ox, self.oy]).T
+            x_arr, y_arr = [], []
+            for (s, ey) in zip(self.ox, self.oy):
+                x,y, _ = self.track.frenet_to_cartesian(
+                    s,
+                    ey,
+                    0.0,
+                    use_raceline=False,
+                )
+                x_arr.append(x)
+                y_arr.append(y)
+            x_arr = np.array(x_arr)
+            y_arr = np.array(y_arr)
+            points = np.array([x_arr, y_arr]).T
             if self.mpc_render is None:
                 self.mpc_render = e.render_lines(points, color=(0, 0, 128), size=2)
             else:
@@ -196,7 +222,7 @@ class NMPCPlanner:
         self.opti = ca.Opti()
 
         # matrix containing all states over all time steps +1 (each column is a state vector)
-        print(self.config.NXK, self.config.TK + 1)
+        # print(self.config.NXK, self.config.TK + 1)
         self.X = self.opti.variable(self.config.NXK, self.config.TK + 1)
 
         # matrix containing all control actions over all time steps (each column is an action vector)
@@ -314,7 +340,7 @@ class NMPCPlanner:
         ipopt_opts = {
             "ipopt": {
                 "print_level": 1,
-                "max_iter": 100,
+                "max_iter": 2000,
                 "acceptable_tol": 1e-6,
                 "acceptable_obj_change_tol": 1e-4,
                 "warm_start_init_point": "yes",
@@ -328,14 +354,15 @@ class NMPCPlanner:
         self.opti.solver("ipopt", ipopt_opts)
 
     def mpc_prob_solve(self, goal_state, current_state):
-        print("goal state", goal_state)
-        print("current state", current_state)
+        # print("goal state", goal_state)
+        # print("current state", current_state)
         s, ey, epsi = self.track.cartesian_to_frenet(
             current_state["pose_x"],
             current_state["pose_y"],
             current_state["pose_theta"],
-            use_raceline=True,
+            use_raceline=False,
         )
+        print(f"s {s}, ey {ey}, epsi {epsi}")
 
         self.ey = ey
         self.curr_vel = current_state["linear_vel_x"]
@@ -423,7 +450,7 @@ class NMPCPlanner:
             self.waypoints[4],
         )
         if mu is None:
-            mu = 0.1
+            mu = 0.7
 
         # Goal state is the last point's velocity and all zeros for the other states (s, ey, delta, vx, vy, wz, epsi, curv)
         goal_state = ca.vertcat(
