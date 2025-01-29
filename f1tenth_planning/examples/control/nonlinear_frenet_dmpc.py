@@ -18,7 +18,7 @@ from scipy.interpolate import CubicSpline
 waypoint_first = 5
 waypoint_num = -5
 def custom_waypoints_to_track(csv_file):
-    config_path = "/home/nvidia/f1-fifth/src/trajectory_csv"
+    config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
 
     # csv = 'wp_20241125_132733.csv'
     # csv = 'interpolated_wp.csv'
@@ -40,7 +40,7 @@ def custom_waypoints_to_track(csv_file):
 
     x = x[waypoint_first:waypoint_num]
     y = y[waypoint_first:waypoint_num] 
-    v = v[waypoint_first:waypoint_num]# / 3.0
+    v = v[waypoint_first:waypoint_num] * 3.0
 
     #filter topull 1 from every ten waypoints, to make the path smoother
     x = x[::10]
@@ -74,8 +74,8 @@ def main():
     KMPC example. This example uses fixed waypoints throughout the 2 laps.
     For an example using dynamic waypoints, see the lane switcher example.
     """
-    wp_track = custom_waypoints_to_track('wp_20241125_132733.csv')
-
+    wp_track = custom_waypoints_to_track('rotated_safe_slalom.csv')
+    # wp_track = custom_waypoints_to_track('Spielberg_blank_raceline.csv')
     # create environment
     env: F110Env = gym.make(
         "f1tenth_gym:f1tenth-v0",
@@ -127,7 +127,7 @@ def main():
     # planner = NMPCPlanner(track=track, debug=False)
     planner = NMPCPlanner(track, debug=False)
     planner.config.dlk = track.centerline.ss[1] - track.centerline.ss[0]
-    planner.config.dlk /= 2.0
+    # planner.config.dlk /= 2.0
 
     env.unwrapped.add_render_callback(planner.render_waypoints)
     env.unwrapped.add_render_callback(planner.render_local_plan)
@@ -180,7 +180,7 @@ def main():
         else:
             start = time.time()
             accl, steerv = planner.plan(ego_obs, mu=1.0)
-            print('planning time:', time.time() - start)
+            # print('planning time:', time.time() - start)
             
         
         obs, timestep, terminated, truncated, infos = env.step(
@@ -190,11 +190,11 @@ def main():
         laptime += timestep
         env.render()
 
-        print(
-            "speed: {}, steer vel: {}, accl: {}".format(
-                ego_obs["linear_vel_x"], steerv, accl
-            )
-        )
+        # print(
+        #     "speed: {}, steer vel: {}, accl: {}".format(
+        #         ego_obs["linear_vel_x"], steerv, accl
+        #     )
+        # )
 
     print("Sim elapsed time:", laptime, "Real elapsed time:", time.time() - start)
 
