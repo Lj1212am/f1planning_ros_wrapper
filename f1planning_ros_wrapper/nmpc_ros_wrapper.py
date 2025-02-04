@@ -41,14 +41,14 @@ class NMPCPlannerNode(Node):
     def __init__(self):
         super().__init__('nmpc_planner_node')
         self.plot = False
-        self.real_car = False
+        self.real_car = True
         # Declare a ROS parameter for the output CSV file name suffix
         self.declare_parameter('csv_suffix', 'nmpc')
 
         self.config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
         
-        # self.csv = "rotated_safe_slalom.csv"
-        self.csv = "Spielberg_blank_raceline.csv"
+        self.csv = "rotated_safe_slalom.csv"
+        # self.csv = "Spielberg_blank_raceline.csv"
         self.map_name = os.path.join(self.config_path, self.csv)
         self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
         # self.waypoints = np.loadtxt(self.map_name, delimiter=',', skiprows=1) 
@@ -56,9 +56,12 @@ class NMPCPlannerNode(Node):
         # self.waypoints[:, 3] += math.pi/2
         # self.sin_yaw = np.sin(self.waypoints[:, 3])
         # self.cos_yaw = np.cos(self.waypoints[:, 3])
+
+        clark_park_origin_x = -909.929318263437
+        clark_park_origin_y = 790.8154416735368
         
-        x = self.waypoints[:, 1]  #* 2.0#+ 1.2
-        y = self.waypoints[:, 2]  #* 2.0#  1.1
+        x = self.waypoints[:, 1] + clark_park_origin_x  #* 2.0#+ 1.2
+        y = self.waypoints[:, 2] + clark_park_origin_y#* 2.0#  1.1
         # x = self.waypoints[:, 0] * 3.0
         # y = self.waypoints[:, 1] * 3.0
         # velx = self.waypoints[:, 2]
@@ -66,7 +69,7 @@ class NMPCPlannerNode(Node):
         
         # v = np.sqrt(velx**2 + vely**2)
         # v = self.waypoints[:, 5]
-        v = np.ones_like(x)  * 5.0
+        v = np.ones_like(x)  * 3.0
         
         
         # Now pass the processed x, y, and velx to the Track class
@@ -86,7 +89,7 @@ class NMPCPlannerNode(Node):
         # Open the CSV file and write the header
         self.csv_file = open(self.output_csv_path, mode='w', newline='')
         self.csv_writer = csv.writer(self.csv_file)
-        self.csv_writer.writerow(["timestamp", "cross_track_error", "current_velocity", "goal_velocity"])
+        self.csv_writer.writerow(["timestamp", "cross_track_error", "current_velocity", "goal_velocity", "x_m", "y_m"])
         self.get_logger().info(f'Initialized CSV logging at {self.output_csv_path}')
         
         drive_topic = '/drive'
@@ -96,8 +99,8 @@ class NMPCPlannerNode(Node):
         else:
             odom_topic = '/ego_racecar/odom'
 
-        self.initial_x = None #0.0 #None
-        self.initial_y = None#0.0 #None
+        self.initial_x = 0.0 #None
+        self.initial_y = 0.0 #None
         
         # if self.real_car:
         #     self.initial_x = 0.0 #1118.0
@@ -223,7 +226,7 @@ class NMPCPlannerNode(Node):
         ref_waypoints = np.column_stack((ref_traj_x, ref_traj_y, ref_traj_yaw))
         self.publish_waypoints_as_markers(ref_waypoints, False)
         
-        self.ref_traj_plot.setData(ref_traj_x, ref_traj_y)
+        # self.ref_traj_plot.setData(ref_traj_x, ref_traj_y)
         
     def state_callback(self, odom_msg):
         """
@@ -303,7 +306,9 @@ class NMPCPlannerNode(Node):
             cross_track_error = self.planner.ey  # Access the cross-track error
             current_velocity = self.planner.curr_vel  # Access the current velocity
             goal_velocity = self.planner.goal_vel  # Access the goal velocity
-            self.csv_writer.writerow([timestamp, cross_track_error, current_velocity, goal_velocity])
+            #add xy to the csv
+
+            self.csv_writer.writerow([timestamp, cross_track_error, current_velocity, goal_velocity, position.x, position.y])
             self.csv_file.flush()  # Ensure data is written to disk
             self.get_logger().info(f'Logged data: CTE={cross_track_error}, Curr_Vel={current_velocity}, Goal_Vel={goal_velocity}')
         
