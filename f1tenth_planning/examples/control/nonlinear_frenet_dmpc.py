@@ -15,37 +15,38 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import CubicSpline
 
 
-waypoint_first = 5
-waypoint_num = -5
+waypoint_first = 0
+waypoint_num = -1
 def custom_waypoints_to_track(csv_file):
-    config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
+    config_path = os.path.join(os.path.dirname(__file__), "maps")
 
     # csv = 'wp_20241125_132733.csv'
     # csv = 'interpolated_wp.csv'
     csv = csv_file
     # csv = 'interpolated_wp.csv'
     map_name = os.path.join(config_path, csv)
-    waypoints = np.loadtxt(map_name, delimiter=';', skiprows=15*2) 
+    waypoints = np.loadtxt(map_name, delimiter=';', skiprows=2) 
 
-    map_name = os.path.join(config_path, csv)
-    waypoints = np.loadtxt(map_name, delimiter=';', skiprows=15*2) 
+    # map_name = os.path.join(config_path, csv)
+    # waypoints = np.loadtxt(map_name, delimiter=';', skiprows=15*2) 
     
     # waypoints[:, 3] += math.pi/2
     sin_yaw = np.sin(waypoints[:, 3])
     cos_yaw = np.cos(waypoints[:, 3])
     
-    x = waypoints[:, 1] * 10.0
-    y = waypoints[:, 2] * 10.0
+    x = waypoints[:, 1]
+    y = waypoints[:, 2]
     v = waypoints[:, 5]
 
-    x = x[waypoint_first:waypoint_num]
-    y = y[waypoint_first:waypoint_num] 
-    v = v[waypoint_first:waypoint_num] * 3.0
+    # x = x[waypoint_first:waypoint_num]
+    # y = y[waypoint_first:waypoint_num] 
+    # v = v[waypoint_first:waypoint_num] * 3.0
+    v = 3.0 * v
 
     #filter topull 1 from every ten waypoints, to make the path smoother
-    x = x[::10]
-    y = y[::10]
-    v = v[::10]
+    # x = x[::10]
+    # y = y[::10]
+    # v = v[::10]
     
     # make sure cubic spline won't fail
     distances = np.sqrt(np.diff(x)**2 + np.diff(y)**2)
@@ -162,7 +163,7 @@ def main():
     ego_obs["beta"] = np.arctan2(ego_obs["linear_vel_y"], ego_obs["linear_vel_x"])
     accl, steerv = 0.0, 0.0
     iter = 0
-    MAX_ITER = 1100
+    # MAX_ITER = 110000
 
     x_traj = []
     y_traj = []
@@ -171,6 +172,7 @@ def main():
     s_traj = []
     ey_traj = []
     ephi_traj = []
+    jump_count = 0
     while not done:
         
         ego_obs["pose_x"] = obs["poses_x"][0]
@@ -197,6 +199,11 @@ def main():
         yaw_traj.append(ego_obs["pose_theta"])
 
         (s_curr, ey_curr, ephi_curr) = planner.frenet_state
+        # if len(ey_traj) > 0:
+        #     if abs(ey_traj[-1] - ey_curr) > 0.1:
+        #         jump_count += 1
+        #         print(f"Jump in ey: {ey_traj[-1]} -> {ey_curr} | Count: {jump_count}")
+
         s_traj.append(s_curr)
         ey_traj.append(ey_curr)
         ephi_traj.append(ephi_curr)
@@ -208,9 +215,9 @@ def main():
         laptime += timestep
         env.render()
 
-        iter += 1
-        if(iter == MAX_ITER):
-            done = True
+        # iter += 1
+        # if(iter == MAX_ITER):
+        #     done = True
 
         # print(
         #     "speed: {}, steer vel: {}, accl: {}".format(

@@ -15,16 +15,16 @@ class mpc_config:
     NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
     TK: int = 5  # finite time horizon length
     Rk: list = field(
-        default_factory=lambda: np.diag([0.1, 0.1])
+        default_factory=lambda: np.diag([0.01, 0.01])
     )  # input cost matrix, penalty for inputs - [accel, steering_speed]
     Rdk: list = field(
-        default_factory=lambda: np.diag([0.1, 0.1])
+        default_factory=lambda: np.diag([0.01, 0.01])
     )  # input difference cost matrix, penalty for change of inputs - [accel, steering_speed]
     Qk: list = field(
-        default_factory=lambda: np.diag([0.0, 15.0, 0.0, 5.0, 0.0, 0.0, 10.0])
+        default_factory=lambda: np.diag([0.0, 25.0, 0.0, 5.0, 0.0, 0.0, 10.0])
     )  # state error cost matrix, for the the next (T) prediction time steps [s, ey, delta, vx, vy, wz, eyaw]
     Qfk: list = field(
-        default_factory=lambda: np.diag([0.0, 15.0, 0.0, 5.0, 0.0, 0.0, 10.0])
+        default_factory=lambda: np.diag([0.0, 25.0, 0.0, 5.0, 0.0, 0.0, 10.0])
     )  # final state error matrix, penalty  for the final state constraints: [s, ey, delta, vx, vy, wz, eyaw]
 
 
@@ -118,6 +118,7 @@ class NMPCPlanner:
         self.waypoint_render = None
         self.local_plan_render = None
         self.frenet_state = (0.0, 0.0, 0.0)
+        self.s_guess = 0.0
 
     def render_waypoints(self, e):
         """
@@ -362,7 +363,9 @@ class NMPCPlanner:
             current_state["pose_y"],
             current_state["pose_theta"],
             use_raceline=False,
+            s_guess=self.s_guess,
         )
+        self.s_guess = s
         self.frenet_state = (s, ey, epsi)
         # print(f"s {s}, ey {ey}, epsi {epsi}")
 
