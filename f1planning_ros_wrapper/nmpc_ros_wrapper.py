@@ -57,8 +57,10 @@ class NMPCPlannerNode(Node):
         # self.sin_yaw = np.sin(self.waypoints[:, 3])
         # self.cos_yaw = np.cos(self.waypoints[:, 3])
 
-        clark_park_origin_x = -909.929318263437
-        clark_park_origin_y = 790.8154416735368
+        clark_park_origin_x = -909.49280
+        clark_park_origin_y = 790.9008
+        # clark_park_origin_x = 0.0
+        # clark_park_origin_y = 0.0 
         
         x = self.waypoints[:, 1] + clark_park_origin_x  #* 2.0#+ 1.2
         y = self.waypoints[:, 2] + clark_park_origin_y#* 2.0#  1.1
@@ -102,6 +104,10 @@ class NMPCPlannerNode(Node):
         self.initial_x = 0.0 #None
         self.initial_y = 0.0 #None
         
+        # self.initial_x = None
+        # self.initial_y = None
+        
+
         # if self.real_car:
         #     self.initial_x = 0.0 #1118.0
         #     self.initial_y = 0.0 #946.1487523074607

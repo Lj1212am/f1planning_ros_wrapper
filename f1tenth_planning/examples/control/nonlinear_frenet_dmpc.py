@@ -34,8 +34,8 @@ def custom_waypoints_to_track(csv_file):
     sin_yaw = np.sin(waypoints[:, 3])
     cos_yaw = np.cos(waypoints[:, 3])
     
-    x = waypoints[:, 1]
-    y = waypoints[:, 2]
+    x = waypoints[:, 1] * 10.0
+    y = waypoints[:, 2] * 10.0
     v = waypoints[:, 5]
 
     x = x[waypoint_first:waypoint_num]
@@ -161,6 +161,16 @@ def main():
     ego_obs["delta"] = 0.0 # Starts with 0, then updates from the steerv 
     ego_obs["beta"] = np.arctan2(ego_obs["linear_vel_y"], ego_obs["linear_vel_x"])
     accl, steerv = 0.0, 0.0
+    iter = 0
+    MAX_ITER = 1100
+
+    x_traj = []
+    y_traj = []
+    yaw_traj = []
+
+    s_traj = []
+    ey_traj = []
+    ephi_traj = []
     while not done:
         
         ego_obs["pose_x"] = obs["poses_x"][0]
@@ -182,6 +192,14 @@ def main():
             accl, steerv = planner.plan(ego_obs, mu=1.0)
             # print('planning time:', time.time() - start)
             
+        x_traj.append(ego_obs["pose_x"])
+        y_traj.append(ego_obs["pose_y"])
+        yaw_traj.append(ego_obs["pose_theta"])
+
+        (s_curr, ey_curr, ephi_curr) = planner.frenet_state
+        s_traj.append(s_curr)
+        ey_traj.append(ey_curr)
+        ephi_traj.append(ephi_curr)
         
         obs, timestep, terminated, truncated, infos = env.step(
             np.array([[steerv, accl]])
@@ -189,6 +207,10 @@ def main():
         done = terminated or truncated
         laptime += timestep
         env.render()
+
+        iter += 1
+        if(iter == MAX_ITER):
+            done = True
 
         # print(
         #     "speed: {}, steer vel: {}, accl: {}".format(
@@ -198,6 +220,36 @@ def main():
 
     print("Sim elapsed time:", laptime, "Real elapsed time:", time.time() - start)
 
+    # Plot the trajectory
+    plt.figure(figsize=(10, 8))
+    sc = plt.scatter(x_traj, y_traj, c=yaw_traj, cmap='viridis', label='Trajectory')
+    plt.colorbar(sc, label='Yaw (radians)')
+    plt.xlabel('X')
+    plt.ylabel('Y')
+    plt.title('Ego Vehicle Trajectory')
+    plt.axis('equal')
+    plt.grid()
+    plt.legend()
+    
+    plt.figure(figsize=(10, 8))
+    sc = plt.scatter(x_traj, y_traj, c=ephi_traj, cmap='viridis', label='Trajectory')
+    plt.colorbar(sc, label='EYaw (radians)')
+    plt.xlabel('X')
+    plt.ylabel('Y')
+    plt.title('Frenet State')
+    plt.axis('equal')
+    plt.grid()
+    plt.legend()
+
+    plt.figure(figsize=(10, 8))
+    plt.scatter(s_traj, ey_traj, c=ephi_traj, cmap='viridis', label='Frenet State')
+    plt.xlabel('s (m)')
+    plt.ylabel('ey (m)')
+    plt.title('Frenet State')
+    plt.axis('equal')
+    plt.grid()
+    plt.legend()
+    plt.show()
 
 if __name__ == "__main__":
     main()

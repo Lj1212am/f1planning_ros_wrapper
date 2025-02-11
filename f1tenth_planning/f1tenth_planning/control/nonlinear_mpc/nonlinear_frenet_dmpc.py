@@ -117,6 +117,7 @@ class NMPCPlanner:
         self.goal_state_render = None
         self.waypoint_render = None
         self.local_plan_render = None
+        self.frenet_state = (0.0, 0.0, 0.0)
 
     def render_waypoints(self, e):
         """
@@ -362,7 +363,8 @@ class NMPCPlanner:
             current_state["pose_theta"],
             use_raceline=False,
         )
-        print(f"s {s}, ey {ey}, epsi {epsi}")
+        self.frenet_state = (s, ey, epsi)
+        # print(f"s {s}, ey {ey}, epsi {epsi}")
 
         self.ey = ey
         self.curr_vel = current_state["linear_vel_x"]
