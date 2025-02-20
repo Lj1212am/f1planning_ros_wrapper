@@ -13,19 +13,19 @@ import casadi as ca
 class mpc_config:
     NXK: int = 7  # length of dynamic state vector: z = [s, ey, delta, vx, vy, wz, eyaw]
     NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
-    TK: int = 5  # finite time horizon length
+    TK: int = 2  # finite time horizon length
     Rk: list = field(
-        default_factory=lambda: np.diag([1.0, 1.0])
+        default_factory=lambda: np.diag([0.01, 0.01])
     )  # input cost matrix, penalty for inputs - [accel, steering_speed]
     Rdk: list = field(
-        default_factory=lambda: np.diag([1.0, 1.0])
+        default_factory=lambda: np.diag([0.01, 0.01])
     )  # input difference cost matrix, penalty for change of inputs - [accel, steering_speed]
     Qk: list = field(
-        default_factory=lambda: np.diag([0.0, 10.0, 0.0, 1.0, 0.0, 0.0, 10.0])
+        default_factory=lambda: np.diag([0.0, 25.0, 0.0, 5.0, 0.0, 0.0, 10.0])
     )  # state error cost matrix, for the the next (T) prediction time steps [s, ey, delta, vx, vy, wz, eyaw]
     Qfk: list = field(
-        default_factory=lambda: np.diag([0.0, 10.0, 0.0, 1.0, 0.0, 0.0, 10.0])
-    )  # final state error matrix, penalty  for the final state constraints: [s, ey, delta, vx, vy, wz, eyaw]
+        default_factory=lambda: np.diag([0.0, 25.0, 0.0, 5.0, 0.0, 0.0, 10.0])
+    )# final state error matrix, penalty  for the final state constraints: [s, ey, delta, vx, vy, wz, eyaw]
 
 
     N_IND_SEARCH: int = 20  # Search index number
@@ -300,9 +300,13 @@ class NMPCPlanner:
                 - cur * ((vx * ca.cos(epsi)) / (1 - cur * ey)),
             )
 
-            deriv_x = ca.if_else(
-                ca.sqrt(vx**2 + vy**2) < self.config.V_SWITCH, deriv_x_ls, deriv_x_hs
-            )
+            # deriv_x = ca.if_else(
+            #     ca.sqrt(vx**2 + vy**2) < self.config.V_SWITCH, deriv_x_ls, deriv_x_hs
+            # )
+            w_std = 0.5 * (ca.tanh((x[3] - self.config.V_SWITCH) / self.config.V_SWITCH) + 1)
+            w_ks = 1 - w_std
+            # output vector: mix results of dynamic and kinematic model
+            deriv_x = w_std * deriv_x_hs + w_ks * deriv_x_ls
 
             return deriv_x
 

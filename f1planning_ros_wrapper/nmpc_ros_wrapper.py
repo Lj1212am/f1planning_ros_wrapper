@@ -71,7 +71,7 @@ class NMPCPlannerNode(Node):
         
         # v = np.sqrt(velx**2 + vely**2)
         # v = self.waypoints[:, 5]
-        v = np.ones_like(x)  * 8.0
+        v = np.ones_like(x)  * 6.0
         
         
         # Now pass the processed x, y, and velx to the Track class
