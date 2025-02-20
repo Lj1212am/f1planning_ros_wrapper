@@ -28,7 +28,7 @@ class WaypointPublisher(Node):
         self.map_name = os.path.join(self.config_path, self.csv)
         self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
 
-        x = self.waypoints[:, 1] #* 2.0
+        x = self.waypoints[:, 1] * 1.7
         y = self.waypoints[:, 2] #* 2.0
         v = np.ones_like(x) * 3.0
         self.track = Track.from_refline(x, y, v)

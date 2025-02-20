@@ -18,7 +18,7 @@ from scipy.interpolate import CubicSpline
 waypoint_first = 0
 waypoint_num = -1
 def custom_waypoints_to_track(csv_file):
-    config_path = os.path.join(os.path.dirname(__file__), "maps")
+    config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
 
     # csv = 'wp_20241125_132733.csv'
     # csv = 'interpolated_wp.csv'
@@ -41,7 +41,7 @@ def custom_waypoints_to_track(csv_file):
     # x = x[waypoint_first:waypoint_num]
     # y = y[waypoint_first:waypoint_num] 
     # v = v[waypoint_first:waypoint_num] * 3.0
-    v = 3.0 * v
+    v = 5.0 * v
 
     #filter topull 1 from every ten waypoints, to make the path smoother
     # x = x[::10]
@@ -85,6 +85,7 @@ def main():
             "num_agents": 1,
             "control_input": "accl",
             "observation_config": {"type": "original"},
+            "params": F110Env.f1fifth_vehicle_params(),
         },
         render_mode="human",
     )
@@ -192,7 +193,7 @@ def main():
         else:
             start = time.time()
             accl, steerv = planner.plan(ego_obs, mu=1.0)
-            # print('planning time:', time.time() - start)
+            print('planning Hz:', 1/(time.time() - start))
             
         x_traj.append(ego_obs["pose_x"])
         y_traj.append(ego_obs["pose_y"])

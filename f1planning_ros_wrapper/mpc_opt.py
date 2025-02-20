@@ -172,11 +172,11 @@ class mpc_config:
         default_factory=lambda: np.diag([0.01, 100.0])
     )  # input difference cost matrix, penalty for change of inputs - [accel, steering_speed]
     Qk: list = field(
-        default_factory=lambda: np.diag([40.5, 40.5, 5.5, 13.0])  
-    )  # state error cost matrix, for the the next (T) prediction time steps [x, y, delta, v, yaw, yaw-rate, beta]
+        default_factory=lambda: np.diag([10.5, 10.5, 25.5, 13.0])  
+    )  # state error cost matrix, for the the next (T) prediction time steps [x, y, yaw, v]
     Qfk: list = field(
-        default_factory=lambda: np.diag([20.5, 20.5, 5.5, 13.0])
-    )  # final state error matrix, penalty  for the final state constraints: [x, y, delta, v, yaw, yaw-rate, beta]
+        default_factory=lambda: np.diag([10.5, 10.5, 25.5, 13.0])
+    )  # final state error matrix, penalty  for the final state constraints: [x, y, yaw, v]
 
     N_IND_SEARCH: int = 20
     DTK: float = 0.1
@@ -267,9 +267,9 @@ def transform_ref_traj_to_local_frame(ref_traj: np.array, x, y, yaw):
     # Debugging: Print corrected yaw
     # print(f"Transformed Yaw (Local Frame): {ref_traj_yaw}")
 
-    if abs(ref_traj_yaw[0]) > 0.1:
-        print('ref traj', ref_traj_yaw)
-        print('yaw input', yaw)
+    # if abs(ref_traj_yaw[0]) > 0.1:
+    #     print('ref traj', ref_traj_yaw)
+    #     print('yaw input', yaw)
 
     # Step 6: Update the transformed trajectory
     ref_traj[:2, :] = ref_traj_pose
@@ -306,7 +306,7 @@ class MPC(Node):
         super().__init__('mpc_node')
         self.plot = False
 
-        self.real_car = True
+        self.real_car = False
         self.config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
 
         self.declare_parameter('csv_suffix', 'kin_mpc')
@@ -341,13 +341,13 @@ class MPC(Node):
         WAYPOINTS_END = -1
         WAYPOINTS_SCALE = 1.0
         self.waypoints = self.waypoints[:WAYPOINTS_END,:]
-        self.waypoints[:, 0] += 1.2 
-        self.waypoints[:, 3] += math.pi/2
-        self.waypoints[:, 3] = np.unwrap(self.waypoints[:, 3])
-        self.waypoints[:, 1:3] *= WAYPOINTS_SCALE
-        self.sin_yaw = np.sin(self.waypoints[:, 3])
-        self.cos_yaw = np.cos(self.waypoints[:, 3])
-        
+        self.waypoints[:, 1] *= 1.7 
+        # self.waypoints[:, 3] += math.pi/2
+        # self.waypoints[:, 3] = np.unwrap(self.waypoints[:, 3])
+        # self.waypoints[:, 1:3] *= WAYPOINTS_SCALE
+        # self.sin_yaw = np.sin(self.waypoints[:, 3])
+        # self.cos_yaw = np.cos(self.waypoints[:, 3])
+        # # 
 
         # for waypoint csv files:
         # waypoints = np.loadtxt(self.map_name, delimiter=',', skiprows=1) 
@@ -455,16 +455,18 @@ class MPC(Node):
 
     def pose_callback(self, pose_msg):
         vehicle_state = self.get_vehicle_state(pose_msg)
-        velocity = self.waypoints[:, 5] * 3.0
-        ref_path = self.calc_ref_trajectory(vehicle_state, self.waypoints[:, 1], self.waypoints[:, 2], self.waypoints[:,3], velocity)
+        velocity = self.waypoints[:, 5] * 8.0
+        ref_path, closest_x, closest_y = self.calc_ref_trajectory(vehicle_state, self.waypoints[:, 1], self.waypoints[:, 2], self.waypoints[:,3], velocity)
        
         ref_path_local = transform_ref_traj_to_local_frame(ref_path, vehicle_state.x, vehicle_state.y, vehicle_state.yaw)
         
         # Calculate Cross-Track Error (CTE)
-        self.cte, _, _ = get_dists_to_point_on_trajectory(
-            np.array([vehicle_state.x, vehicle_state.y]), 
-            np.column_stack((ref_path[0, :], ref_path[1, :]))
+        # print("ref path x", ref_path[0, 0], "ref path y", ref_path[1, 0])
+        print("vehicle state x", vehicle_state.x, "vehicle state y", vehicle_state.y)
+        self.cte = np.linalg.norm(
+            np.array([vehicle_state.x, vehicle_state.y]) - np.array([closest_x, closest_y])
         )
+        print("cte: ", self.cte)
         self.current_velocity = vehicle_state.v
         goal_velocity = ref_path[2,0]
 
@@ -549,8 +551,8 @@ class MPC(Node):
                 self.initial_x = pose_msg.pose.pose.position.x
                 self.initial_y = pose_msg.pose.pose.position.y
                 print(f"Initial pose on simulation: {self.initial_x}, {self.initial_y}")
-            vehicle_state.x = pose_msg.pose.pose.position.x - self.initial_x + self.waypoints[0, 1]
-            vehicle_state.y = pose_msg.pose.pose.position.y - self.initial_y + self.waypoints[0, 2]
+            vehicle_state.x = pose_msg.pose.pose.position.x #- self.initial_x + self.waypoints[0, 1]
+            vehicle_state.y = pose_msg.pose.pose.position.y #- self.initial_y + self.waypoints[0, 2]
             curr_quat = pose_msg.pose.pose.orientation
             vehicle_state.yaw = math.atan2(2 * (curr_quat.w * curr_quat.z + curr_quat.x * curr_quat.y),
                               1 - 2 * (curr_quat.y ** 2 + curr_quat.z ** 2))
@@ -782,6 +784,9 @@ class MPC(Node):
         # Load the initial parameters from the setpoint into the trajectory
         ref_traj[0, 0] = cx[ind]
         ref_traj[1, 0] = cy[ind]
+        print("ref traj x", ref_traj[0, 0], "ref traje y", ref_traj[1, 0])
+        closest_x = ref_traj[0, 0]
+        closest_y = ref_traj[1, 0]
         ref_traj[2, 0] = sp[ind]
         ref_traj[3, 0] = cyaw[ind]
 
@@ -813,7 +818,7 @@ class MPC(Node):
         # print(f"4 {time.time() - tock}")
 
 
-        return ref_traj
+        return ref_traj, closest_x, closest_y
     
     def predict_motion(self, x0, oa, od, xref):
         path_predict = xref * 0.0

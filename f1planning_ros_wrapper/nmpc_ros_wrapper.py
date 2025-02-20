@@ -41,7 +41,7 @@ class NMPCPlannerNode(Node):
     def __init__(self):
         super().__init__('nmpc_planner_node')
         self.plot = False
-        self.real_car = True
+        self.real_car = False
         # Declare a ROS parameter for the output CSV file name suffix
         self.declare_parameter('csv_suffix', 'nmpc')
 
@@ -57,12 +57,12 @@ class NMPCPlannerNode(Node):
         # self.sin_yaw = np.sin(self.waypoints[:, 3])
         # self.cos_yaw = np.cos(self.waypoints[:, 3])
 
-        clark_park_origin_x = -909.49280
-        clark_park_origin_y = 790.9008
-        # clark_park_origin_x = 0.0
-        # clark_park_origin_y = 0.0 
+        # clark_park_origin_x = -909.49280
+        # clark_park_origin_y = 790.9008
+        clark_park_origin_x = 0.0
+        clark_park_origin_y = 0.0 
         
-        x = self.waypoints[:, 1] + clark_park_origin_x  #* 2.0#+ 1.2
+        x = self.waypoints[:, 1] * 1.7 + clark_park_origin_x  #* 2.0#+ 1.2
         y = self.waypoints[:, 2] + clark_park_origin_y#* 2.0#  1.1
         # x = self.waypoints[:, 0] * 3.0
         # y = self.waypoints[:, 1] * 3.0
@@ -71,7 +71,7 @@ class NMPCPlannerNode(Node):
         
         # v = np.sqrt(velx**2 + vely**2)
         # v = self.waypoints[:, 5]
-        v = np.ones_like(x)  * 3.0
+        v = np.ones_like(x)  * 8.0
         
         
         # Now pass the processed x, y, and velx to the Track class
@@ -101,11 +101,11 @@ class NMPCPlannerNode(Node):
         else:
             odom_topic = '/ego_racecar/odom'
 
-        self.initial_x = 0.0 #None
-        self.initial_y = 0.0 #None
+        # self.initial_x = 0.0 #None
+        # self.initial_y = 0.0 #None
         
-        # self.initial_x = None
-        # self.initial_y = None
+        self.initial_x = None
+        self.initial_y = None
         
 
         # if self.real_car:
@@ -148,13 +148,19 @@ class NMPCPlannerNode(Node):
         self.old_accl = 0.0
         # Initialize placeholders
         self.current_state = None
+
+        self.first_call = True
+        # self.pub_drive.publish(AckermannDriveStamped())
+        self.pub_pose = self.create_publisher(PoseWithCovarianceStamped, '/initialpose', 1)
+
+
         
         #soft start
         # accl = 9.0
         # steer = 0.0
         if not self.real_car:
             drive_msg = AckermannDriveStamped()
-            drive_msg.drive.speed = 1.0
+            drive_msg.drive.speed = 0.0
             drive_msg.drive.steering_angle = 0.0
             self.pub_drive.publish(drive_msg)
 
@@ -257,6 +263,32 @@ class NMPCPlannerNode(Node):
             linear_vel_x = -1 *odom_msg.twist.twist.linear.x
             linear_vel_y = -1 * odom_msg.twist.twist.linear.y # Tomorrow we will fix here
         else:
+            
+            if self.first_call:
+                #publish odom to 0.0 0.0 and drive to 0.0 0.0
+                drive_msg = AckermannDriveStamped()
+                drive_msg.drive.speed = 0.0
+                drive_msg.drive.steering_angle = 0.0
+                self.pub_drive.publish(drive_msg)
+
+                pose_cov_msg = PoseWithCovarianceStamped()
+                #set pose cov msgs to 0
+                pose_cov_msg.pose.pose.position = Point()
+                pose_cov_msg.pose.pose.position.x = 0.0
+                pose_cov_msg.pose.pose.position.y = 0.0
+                pose_cov_msg.pose.pose.position.z = 0.0
+                pose_cov_msg.pose.pose.orientation.x = 0.0
+                pose_cov_msg.pose.pose.orientation.y = 0.0
+                pose_cov_msg.pose.pose.orientation.z = 0.0
+                pose_cov_msg.pose.pose.orientation.w = 1.0
+                # pose_cov_msg.pose.covariance = [0.0] * 36
+
+
+                self.pub_pose.publish(pose_cov_msg)
+                # self.pub_odom.publish(Odometry())
+                print('finished initing odom and drive')
+                self.first_call = False
+            
             # steering_angle = ackerman_msg.drive.steering_angle
             # Extract the pose from the Odometry message
             position = odom_msg.pose.pose.position
