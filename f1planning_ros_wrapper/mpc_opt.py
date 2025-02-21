@@ -307,7 +307,7 @@ class MPC(Node):
         self.plot = False
 
         self.real_car = False
-        self.config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
+        self.config_path = "/home/lee/work/f1-fifth/src/trajectory_csv"
 
         self.declare_parameter('csv_suffix', 'kin_mpc')
 
@@ -315,7 +315,7 @@ class MPC(Node):
         csv_suffix = self.get_parameter('csv_suffix').get_parameter_value().string_value
 
 
-        self.csv_path = "/home/nvidia/ros_ws/src/f1planning_ros_wrapper/real_world_results"
+        self.csv_path = "/home/lee/work/f1-fifth/src/f1planning_ros_wrapper/real_world_results"
         self.output_csv_file = f"cross_track_error_log_{csv_suffix}.csv"
 
         self.output_csv_path = os.path.join(self.csv_path, self.output_csv_file)

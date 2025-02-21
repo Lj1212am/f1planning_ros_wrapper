@@ -13,18 +13,18 @@ import casadi as ca
 class mpc_config:
     NXK: int = 7  # length of dynamic state vector: z = [s, ey, delta, vx, vy, wz, eyaw]
     NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
-    TK: int = 2  # finite time horizon length
+    TK: int = 7  # finite time horizon length
     Rk: list = field(
-        default_factory=lambda: np.diag([0.01, 0.01])
+        default_factory=lambda: np.diag([0.1, 0.4])
     )  # input cost matrix, penalty for inputs - [accel, steering_speed]
     Rdk: list = field(
-        default_factory=lambda: np.diag([0.01, 0.01])
+        default_factory=lambda: np.diag([0.1, 0.4])
     )  # input difference cost matrix, penalty for change of inputs - [accel, steering_speed]
     Qk: list = field(
-        default_factory=lambda: np.diag([0.0, 25.0, 0.0, 5.0, 0.0, 0.0, 10.0])
+        default_factory=lambda: np.diag([0.0, 15.0, 0.0, 1.0, 0.0, 0.0, 5.0])
     )  # state error cost matrix, for the the next (T) prediction time steps [s, ey, delta, vx, vy, wz, eyaw]
     Qfk: list = field(
-        default_factory=lambda: np.diag([0.0, 25.0, 0.0, 5.0, 0.0, 0.0, 10.0])
+        default_factory=lambda: np.diag([0.0, 15.0, 0.0, 1.0, 0.0, 0.0, 5.0])
     )# final state error matrix, penalty  for the final state constraints: [s, ey, delta, vx, vy, wz, eyaw]
 
 
@@ -101,6 +101,30 @@ class NMPCPlanner:
         # plt.show()
         
         self.config = config
+        
+        
+        # MU: float = 1.0  # friction coefficient
+        # C_SF: float = 5.0  # front cornering stiffness
+        # C_SR: float = 5.0  # rear cornering stiffness
+        # BF = 1.0  # TODO
+        # BR = 1.0  # TODO
+        # DF = None  # friction force front, determined by mu and m post init
+        # DR = None  # friction force rear, determined by mu and m post init
+    
+        self.config.C_SF, self.config.C_SR = 1.0, 1.0
+        # C_Sf, C_Sr = 1.3507, 1.3507
+        Fzf = (self.config.M * 9.81) * (self.config.LF / (self.config.LF + self.config.LR))
+        Fzr = (self.config.M * 9.81) * (self.config.LR / (self.config.LF + self.config.LR))
+        # ky1 = 21.92 # Lateral slip stiffness Kfy/Fz at Fznom normal car
+        ky1 = 35. # Lateral slip stiffness Kfy/Fz at Fznom sports car
+        self.config.DF = self.config.MU * Fzf
+        Kf = Fzf * ky1
+        self.config.BF = Kf / (self.config.C_SF * self.config.DF)
+        self.config.DR = self.config.MU * Fzr
+        Kr = Fzr * ky1
+        self.config.BF = Kr / (self.config.C_SR * self.config.DR)
+        
+        self.mpc_sol_points = None
         self.oa = None
         self.odelta_v = None
         self.ox = None
@@ -163,6 +187,8 @@ class NMPCPlanner:
             x_arr = np.array(x_arr)
             y_arr = np.array(y_arr)
             points = np.array([x_arr, y_arr]).T
+            # print('points', points)
+            self.mpc_sol_points = points
             if self.mpc_render is None:
                 self.mpc_render = e.render_lines(points, color=(0, 0, 128), size=2)
             else:
@@ -346,10 +372,12 @@ class NMPCPlanner:
         ipopt_opts = {
             "ipopt": {
                 "print_level": 1,
-                "max_iter": 2000,
-                "acceptable_tol": 1e-6,
-                "acceptable_obj_change_tol": 1e-4,
+                "max_iter": 1000,
+                "acceptable_tol": 1e-4,
+                "acceptable_obj_change_tol": 1e-3,
                 "warm_start_init_point": "yes",
+                "linear_solver": "mumps",
+                # "hessian_approximation": "limited-memory",
             },
             "print_time": 0,
             "jit": True, 
@@ -358,6 +386,24 @@ class NMPCPlanner:
             "jit_temp_suffix": False,
         }
         self.opti.solver("ipopt", ipopt_opts)
+        # ipopt_opts = {
+        #     "ipopt": {
+        #         "print_level": 1,  # Reduce verbosity for faster runtime
+        #         "max_iter": 1000,  # Limit the number of iterations
+        #         "tol": 1e-4,  # Looser tolerance
+        #         "acceptable_tol": 1e-4,
+        #         "acceptable_obj_change_tol": 1e-3,
+        #         "linear_solver": "mumps",  # Faster linear solver for large problems
+        #     },
+        #     "print_time": 0,
+        #     "jit": True,
+        #     "compiler": "shell",
+        #     # "jit_options": {"flags": ["-O3"], "verbose": False},
+        #     "jit_options": jit_options,
+        #     "jit_temp_suffix": False,
+        # }
+        # self.opti.solver("ipopt", ipopt_opts)
+
 
     def mpc_prob_solve(self, goal_state, current_state):
         # print("goal state", goal_state)

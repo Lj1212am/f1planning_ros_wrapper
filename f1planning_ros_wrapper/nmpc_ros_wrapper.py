@@ -10,7 +10,7 @@ import sys
 import math
 import os
 
-sys.path.append('/home/nvidia/ros_ws/src/f1planning_ros_wrapper/f1tenth_planning')
+sys.path.append('/home/lee/work/f1-fifth/src/f1planning_ros_wrapper/f1tenth_planning')
 
 #NMPC Imports
 from dataclasses import dataclass, field
@@ -45,7 +45,7 @@ class NMPCPlannerNode(Node):
         # Declare a ROS parameter for the output CSV file name suffix
         self.declare_parameter('csv_suffix', 'nmpc')
 
-        self.config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
+        self.config_path = "/home/lee/work/f1-fifth/src/trajectory_csv"
         
         self.csv = "rotated_safe_slalom.csv"
         # self.csv = "Spielberg_blank_raceline.csv"
@@ -83,7 +83,7 @@ class NMPCPlannerNode(Node):
         csv_suffix = self.get_parameter('csv_suffix').get_parameter_value().string_value
 
         # Construct the output CSV file name
-        self.csv_path = "/home/nvidia/ros_ws/src/f1planning_ros_wrapper/real_world_results"
+        self.csv_path = "/home/lee/work/f1-fifth/src/f1planning_ros_wrapper/real_world_results"
         self.output_csv_file = f"cross_track_error_log_{csv_suffix}.csv"
 
         self.output_csv_path = os.path.join(self.csv_path, self.output_csv_file)
@@ -140,7 +140,7 @@ class NMPCPlannerNode(Node):
         WAYPOINTS_SUBSAMPLE_STEP = 10
         self.waypoints = self.waypoints[::WAYPOINTS_SUBSAMPLE_STEP, :]
         
-        self.marker_pub = self.create_publisher(MarkerArray, 'waypoints_markers', 1)
+        self.marker_pub = self.create_publisher(MarkerArray, 'marker_mpc_sol', 1)
         # self.timer = self.create_timer(1.0, self.publish_waypoints_as_markers)
         # self.publish_waypoints_as_markers(self.waypoints, False)
 
@@ -222,21 +222,38 @@ class NMPCPlannerNode(Node):
         self.steering_angle = ackerman_msg.drive.steering_angle
         
     def friction_callback(self, mu_msg):
-        self.mu = float(mu_msg.data) + 0.15
+        self.mu = float(mu_msg.data) 
     
     def render_mpc_sol(self):
         """
         Publish the MPC solution as a Marker in RViz.
         """
         
-        ref_traj_frenet = self.planner.ref_path
+        # # ref_traj_frenet = self.planner.ref_path
+        # points = self.planner.mpc_sol_points 
         
-        ref_traj_x = ref_traj_frenet[0,:]
-        ref_traj_y = ref_traj_frenet[1,:]
-        ref_traj_yaw = ref_traj_frenet[4,:]
-       
-        ref_waypoints = np.column_stack((ref_traj_x, ref_traj_y, ref_traj_yaw))
-        self.publish_waypoints_as_markers(ref_waypoints, False)
+        # print('points', points)
+        # ref_waypoints = np.array(points)
+        # print('ref waypoints', ref_waypoints)
+        # # ref_waypoints = np.column_stack((ref_traj_x, ref_traj_y, ref_traj_yaw))
+        # self.publish_waypoints_as_markers(ref_waypoints, True)
+        if self.planner.ox is not None and self.planner.oy is not None:
+            x_arr, y_arr = [], []
+            for (s, ey) in zip(self.planner.ox, self.planner.oy):
+                x,y, _ = self.planner.track.frenet_to_cartesian(
+                    s,
+                    ey,
+                    0.0,
+                    use_raceline=False,
+                )
+                x_arr.append(x)
+                y_arr.append(y)
+            x_arr = np.array(x_arr)
+            y_arr = np.array(y_arr)
+            points = np.array([x_arr, y_arr]).T
+            # print('points', points)
+            # self.mpc_sol_points = points
+            self.publish_waypoints_as_markers(points, True)
         
         # self.ref_traj_plot.setData(ref_traj_x, ref_traj_y)
         
@@ -264,30 +281,30 @@ class NMPCPlannerNode(Node):
             linear_vel_y = -1 * odom_msg.twist.twist.linear.y # Tomorrow we will fix here
         else:
             
-            if self.first_call:
-                #publish odom to 0.0 0.0 and drive to 0.0 0.0
-                drive_msg = AckermannDriveStamped()
-                drive_msg.drive.speed = 0.0
-                drive_msg.drive.steering_angle = 0.0
-                self.pub_drive.publish(drive_msg)
+            # if self.first_call:
+            #     #publish odom to 0.0 0.0 and drive to 0.0 0.0
+            #     drive_msg = AckermannDriveStamped()
+            #     drive_msg.drive.speed = 0.0
+            #     drive_msg.drive.steering_angle = 0.0
+            #     self.pub_drive.publish(drive_msg)
 
-                pose_cov_msg = PoseWithCovarianceStamped()
-                #set pose cov msgs to 0
-                pose_cov_msg.pose.pose.position = Point()
-                pose_cov_msg.pose.pose.position.x = 0.0
-                pose_cov_msg.pose.pose.position.y = 0.0
-                pose_cov_msg.pose.pose.position.z = 0.0
-                pose_cov_msg.pose.pose.orientation.x = 0.0
-                pose_cov_msg.pose.pose.orientation.y = 0.0
-                pose_cov_msg.pose.pose.orientation.z = 0.0
-                pose_cov_msg.pose.pose.orientation.w = 1.0
-                # pose_cov_msg.pose.covariance = [0.0] * 36
+            #     pose_cov_msg = PoseWithCovarianceStamped()
+            #     #set pose cov msgs to 0
+            #     pose_cov_msg.pose.pose.position = Point()
+            #     pose_cov_msg.pose.pose.position.x = 0.0
+            #     pose_cov_msg.pose.pose.position.y = 0.0
+            #     pose_cov_msg.pose.pose.position.z = 0.0
+            #     pose_cov_msg.pose.pose.orientation.x = 0.0
+            #     pose_cov_msg.pose.pose.orientation.y = 0.0
+            #     pose_cov_msg.pose.pose.orientation.z = 0.0
+            #     pose_cov_msg.pose.pose.orientation.w = 1.0
+            #     # pose_cov_msg.pose.covariance = [0.0] * 36
 
 
-                self.pub_pose.publish(pose_cov_msg)
-                # self.pub_odom.publish(Odometry())
-                print('finished initing odom and drive')
-                self.first_call = False
+            #     self.pub_pose.publish(pose_cov_msg)
+            #     # self.pub_odom.publish(Odometry())
+            #     print('finished initing odom and drive')
+            #     self.first_call = False
             
             # steering_angle = ackerman_msg.drive.steering_angle
             # Extract the pose from the Odometry message
@@ -327,31 +344,31 @@ class NMPCPlannerNode(Node):
         
         accl = 0.0
         steerv = 0.0
-        # # if linear velocity < 1 set it greater than 1 else accel is 9 and steerv is 0
-        # if linear_vel_x < 0.1 and not self.real_car:
-        #     accl = 9.0
-        #     steerv = 1.0
-        # else:
+        # if linear velocity < 1 set it greater than 1 else accel is 9 and steerv is 0
+        if linear_vel_x < 1.0 and not self.real_car:
+            accl = 9.0
+            steerv = 0.0
+        else:
         # Plan using the NMPC planner
         
-        try:
-            accl, steerv = self.planner.plan(state_dict, self.mu)
-            # self.render_mpc_sol()
+            try:
+                accl, steerv = self.planner.plan(state_dict, self.mu)
+                self.render_mpc_sol()
 
-            # Log the cross-track error to the CSV file
-            current_time = self.get_clock().now().to_msg()
-            timestamp = f"{current_time.sec}.{current_time.nanosec}"
-            cross_track_error = self.planner.ey  # Access the cross-track error
-            current_velocity = self.planner.curr_vel  # Access the current velocity
-            goal_velocity = self.planner.goal_vel  # Access the goal velocity
-            #add xy to the csv
+                # Log the cross-track error to the CSV file
+                current_time = self.get_clock().now().to_msg()
+                timestamp = f"{current_time.sec}.{current_time.nanosec}"
+                cross_track_error = self.planner.ey  # Access the cross-track error
+                current_velocity = self.planner.curr_vel  # Access the current velocity
+                goal_velocity = self.planner.goal_vel  # Access the goal velocity
+                #add xy to the csv
 
-            self.csv_writer.writerow([timestamp, cross_track_error, current_velocity, goal_velocity, position.x, position.y])
-            self.csv_file.flush()  # Ensure data is written to disk
-            self.get_logger().info(f'Logged data: CTE={cross_track_error}, Curr_Vel={current_velocity}, Goal_Vel={goal_velocity}')
-        
-        except Exception as e:
-            self.get_logger().error(f'Error in planning: {e}')
+                self.csv_writer.writerow([timestamp, cross_track_error, current_velocity, goal_velocity, position.x, position.y])
+                self.csv_file.flush()  # Ensure data is written to disk
+                self.get_logger().info(f'Logged data: CTE={cross_track_error}, Curr_Vel={current_velocity}, Goal_Vel={goal_velocity}')
+            
+            except Exception as e:
+                self.get_logger().error(f'Error in planning: {e}')
                 
             
         
@@ -392,7 +409,10 @@ class NMPCPlannerNode(Node):
         # for i, waypoint in enumerate(self.waypoints):
             marker = Marker()
             marker.header.frame_id = "map"  # Set appropriate frame ID
-            marker.type = Marker.ARROW
+            if not ref:
+                marker.type = Marker.ARROW
+            else:
+                marker.type = Marker.SPHERE
             marker.action = Marker.ADD
             marker.id = i  # Each marker needs a unique ID
             marker.id = i + 1000  # Each marker needs a unique ID
@@ -401,9 +421,9 @@ class NMPCPlannerNode(Node):
             marker.scale.z = 0.2  # Arrow height
             if ref:
                 marker.id = i + 1000  # Each marker needs a unique ID
-                marker.scale.x = 1.0  # Arrow length
-                marker.scale.y = 0.2  # Arrow width
-                marker.scale.z = 0.2  # Arrow height
+                marker.scale.x = 0.2  # Sphere length
+                marker.scale.y = 0.2  # Sphere width
+                marker.scale.z = 0.2  # Sphere height
 
             # Set waypoint positions and orientations
             marker.pose.position.x = float(waypoint[0])  # x-coordinate
@@ -411,18 +431,19 @@ class NMPCPlannerNode(Node):
             marker.pose.position.z = 0.2  # z-coordinate (flat 2D track)
 
             # Convert yaw to quaternion for orientation
-            yaw = float(waypoint[2])  # yaw angle
-            q = self.yaw_to_quaternion(yaw)
-            marker.pose.orientation.x = q[0]
-            marker.pose.orientation.y = q[1]
-            marker.pose.orientation.z = q[2]
-            marker.pose.orientation.w = q[3]
+            if not ref:
+                yaw = float(waypoint[2])  # yaw angle
+                q = self.yaw_to_quaternion(yaw)
+                marker.pose.orientation.x = q[0]
+                marker.pose.orientation.y = q[1]
+                marker.pose.orientation.z = q[2]
+                marker.pose.orientation.w = q[3]
 
             # Set the color of the marker
             if ref:
                 marker.color.a = 1.0
-                marker.color.r = 0.0
-                marker.color.g = 1.0
+                marker.color.r = 1.0
+                marker.color.g = 0.0
                 marker.color.b = 0.0
             else:
                 marker.color.a = 1.0  # Alpha

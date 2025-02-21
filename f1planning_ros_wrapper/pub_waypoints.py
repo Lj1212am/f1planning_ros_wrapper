@@ -7,7 +7,7 @@ import numpy as np
 import sys
 import os
 
-sys.path.append('/home/nvidia/ros_ws/src/f1planning_ros_wrapper/f1tenth_planning')
+sys.path.append('/home/lee/work/f1-fifth/src/f1planning_ros_wrapper/f1tenth_planning')
 
 #NMPC Imports
 from f1tenth_gym.envs.track import Track
@@ -18,7 +18,7 @@ from visualization_msgs.msg import MarkerArray, Marker
 class WaypointPublisher(Node):
     def __init__(self):
         super().__init__('nmpc_planner_node')
-        self.config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
+        self.config_path = "/home/lee/work/f1-fifth/src/trajectory_csv"
         
         ##setup a timer callpacl to publish waypoints as markers
         self.timer = self.create_timer(0.1, self.publish_waypoints_as_markers)
