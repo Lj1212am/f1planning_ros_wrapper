@@ -13,18 +13,18 @@ import casadi as ca
 class mpc_config:
     NXK: int = 7  # length of dynamic state vector: z = [s, ey, delta, vx, vy, wz, eyaw]
     NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
-    TK: int = 5 # finite time horizon length
+    TK: int = 4 # finite time horizon length
     Rk: list = field(
-        default_factory=lambda: np.diag([0.05, 0.5])
+        default_factory=lambda: np.diag([0.1, 0.6])
     )  # input cost matrix, penalty for inputs - [accel, steering_speed]
     Rdk: list = field(
-        default_factory=lambda: np.diag([0.05, 0.5])
+        default_factory=lambda: np.diag([0.1, 0.6])
     )  # input difference cost matrix, penalty for change of inputs - [accel, steering_speed]
     Qk: list = field(
-        default_factory=lambda: np.diag([0.0, 100.0, 0.0, 2.0, 0.0, 0.0, 50.0])
+        default_factory=lambda: np.diag([0.0, 100.0, 0.0, 1.0, 0.0, 0.0, 80.0])
     )  # state error cost matrix, for the the next (T) prediction time steps [s, ey, delta, vx, vy, wz, eyaw]
     Qfk: list = field(
-        default_factory=lambda: np.diag([0.0, 100.0, 0.0, 2.0, 0.0, 0.0, 50.0])
+        default_factory=lambda: np.diag([0.0, 100.0, 0.0, 1.0, 0.0, 0.0, 80.0])
     )  # final state error matrix, penalty  for the final state constraints: [s, ey, delta, vx, vy, wz, eyaw]
 
 
