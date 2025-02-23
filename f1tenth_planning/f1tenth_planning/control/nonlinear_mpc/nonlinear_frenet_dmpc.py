@@ -15,10 +15,10 @@ class mpc_config:
     NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
     TK: int = 5 # finite time horizon length
     Rk: list = field(
-        default_factory=lambda: np.diag([0.1, 1.0])
+        default_factory=lambda: np.diag([0.05, 0.5])
     )  # input cost matrix, penalty for inputs - [accel, steering_speed]
     Rdk: list = field(
-        default_factory=lambda: np.diag([0.1, 1.0])
+        default_factory=lambda: np.diag([0.05, 0.5])
     )  # input difference cost matrix, penalty for change of inputs - [accel, steering_speed]
     Qk: list = field(
         default_factory=lambda: np.diag([0.0, 100.0, 0.0, 2.0, 0.0, 0.0, 50.0])
