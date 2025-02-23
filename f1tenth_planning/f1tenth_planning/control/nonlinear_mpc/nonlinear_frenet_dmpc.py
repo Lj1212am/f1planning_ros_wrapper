@@ -13,19 +13,19 @@ import casadi as ca
 class mpc_config:
     NXK: int = 7  # length of dynamic state vector: z = [s, ey, delta, vx, vy, wz, eyaw]
     NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
-    TK: int = 7  # finite time horizon length
+    TK: int = 5 # finite time horizon length
     Rk: list = field(
-        default_factory=lambda: np.diag([0.1, 0.4])
+        default_factory=lambda: np.diag([0.1, 1.0])
     )  # input cost matrix, penalty for inputs - [accel, steering_speed]
     Rdk: list = field(
-        default_factory=lambda: np.diag([0.1, 0.4])
+        default_factory=lambda: np.diag([0.1, 1.0])
     )  # input difference cost matrix, penalty for change of inputs - [accel, steering_speed]
     Qk: list = field(
-        default_factory=lambda: np.diag([0.0, 15.0, 0.0, 1.0, 0.0, 0.0, 5.0])
+        default_factory=lambda: np.diag([0.0, 100.0, 0.0, 2.0, 0.0, 0.0, 50.0])
     )  # state error cost matrix, for the the next (T) prediction time steps [s, ey, delta, vx, vy, wz, eyaw]
     Qfk: list = field(
-        default_factory=lambda: np.diag([0.0, 15.0, 0.0, 1.0, 0.0, 0.0, 5.0])
-    )# final state error matrix, penalty  for the final state constraints: [s, ey, delta, vx, vy, wz, eyaw]
+        default_factory=lambda: np.diag([0.0, 100.0, 0.0, 2.0, 0.0, 0.0, 50.0])
+    )  # final state error matrix, penalty  for the final state constraints: [s, ey, delta, vx, vy, wz, eyaw]
 
 
     N_IND_SEARCH: int = 20  # Search index number
@@ -478,7 +478,8 @@ class NMPCPlanner:
         #     self.ox[i] = curr_x
         #     self.oy[i] = curr_y
 
-        return self.oa[0], self.odelta_v[0]
+        return self.oa, self.odelta_v
+
 
     def plan(self, current_state, mu = None):
         """
