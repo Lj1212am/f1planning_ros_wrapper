@@ -41,11 +41,11 @@ class mpc_config:
     MU: float = 1.0489 # friction coefficient
     C_SF: float = 4.718 # front cornering stiffness
     C_SR: float = 5.4562 # rear cornering stiffness
-    LF: float = 0.15875 # distance from center of gravity to front axle
-    LR: float = 0.17145 # distance from center of gravity to rear axle
-    H: float = 0.074 # height of center of gravity
-    M: float = 3.74 # mass of vehicle
-    I: float = 0.04712 # moment of inertia
+    LF: float = 0.2735 # distance from center of gravity to front axle
+    LR: float = 0.2585 # distance from center of gravity to rear axle
+    H: float = 0.1875 # height of center of gravity
+    M: float = 15.32 # mass of vehicle
+    I: float = 0.64332 # moment of inertia
 
 class NMPCPlanner:
     """
@@ -231,8 +231,8 @@ class NMPCPlanner:
         # matrix containing all control actions over all time steps (each column is an action vector)
         U = ca.SX.sym('U', n_controls, self.config.TK)
 
-        # coloumn vector for storing initial state and target state
-        P = ca.SX.sym('P', n_states, self.config.TK+1)
+        # coloumn vector for storing the reference trajectory +1 for the friction coefficient
+        P = ca.SX.sym('P', n_states, self.config.TK+2)
 
         # state weights matrix converted from config Qk
         Q = ca.diagcat(*np.diag(self.config.Qk))
@@ -243,6 +243,7 @@ class NMPCPlanner:
         # set gravity constant
         g = 9.81  # [m/s^2]
 
+        # mu = P[0, -1] # friction coefficient
         mu = self.config.MU
         C_Sf = self.config.C_SF
         C_Sr = self.config.C_SR
@@ -292,33 +293,33 @@ class NMPCPlanner:
                             w_std * d_beta_fast + w_ks * d_beta_slow # dbeta/dt = f(x,u)
                         ) # dx/dt = f(x,u)
 
-        RHS_LOW_SPEED = ca.vertcat(
-                            v * ca.cos(yaw + beta),  # dx/dt = v * cos(yaw + beta)
-                            v * ca.sin(yaw + beta),  # dy/dt = v * sin(yaw + beta)
-                            delta_v,                 # d(delta)/dt = delta_v
-                            a,                       # dv/dt = a
-                            dyaw_slow,  # dyaw/dt = yaw_rate
-                            dyaw_rate_slow,                  # dyaw_rate/dt = RHS
-                            d_beta_slow                   # dbeta/dt = d_beta
-                        ) # dx/dt = f(x,u)
+        # RHS_LOW_SPEED = ca.vertcat(
+        #                     v * ca.cos(yaw + beta),  # dx/dt = v * cos(yaw + beta)
+        #                     v * ca.sin(yaw + beta),  # dy/dt = v * sin(yaw + beta)
+        #                     delta_v,                 # d(delta)/dt = delta_v
+        #                     a,                       # dv/dt = a
+        #                     dyaw_slow,  # dyaw/dt = yaw_rate
+        #                     dyaw_rate_slow,                  # dyaw_rate/dt = RHS
+        #                     d_beta_slow                   # dbeta/dt = d_beta
+        #                 ) # dx/dt = f(x,u)
     
-        RHS_DYN = ca.vertcat(
-                            v * ca.cos(yaw + beta),  # dx/dt = v * cos(yaw + beta)
-                            v * ca.sin(yaw + beta),  # dy/dt = v * sin(yaw + beta)
-                            delta_v,                 # d(delta)/dt = delta_v
-                            a,                       # dv/dt = a
-                            yaw_rate,                # dyaw/dt = yaw_rate
-                            -mu * m / (v * I * (lr + lf)) * (
-                                        lf ** 2 * C_Sf * (g * lr - a * h) + lr ** 2 * C_Sr * (g * lf + a * h)) * yaw_rate \
-                            + mu * m / (I * (lr + lf)) * (lr * C_Sr * (g * lf + a * h) - lf * C_Sf * (g * lr - a * h)) * beta \
-                            + mu * m / (I * (lr + lf)) * lf * C_Sf * (g * lr - a * h) * delta, # dyaw_rate/dt = RHS
-                            (mu / (v ** 2 * (lr + lf)) * (C_Sr * (g * lf + a * h) * lr - C_Sf * (g * lr - a * h) * lf) - 1) *
-                            yaw_rate \
-                            - mu / (v * (lr + lf)) * (C_Sr * (g * lf + a * h) + C_Sf * (g * lr - a * h)) * beta \
-                            + mu / (v * (lr + lf)) * (C_Sf * (g * lr - a * h)) * delta    # dbeta/dt = RHS
-                        ) # dx/dt = f(x,u)
+        # RHS_DYN = ca.vertcat(
+        #                     v * ca.cos(yaw + beta),  # dx/dt = v * cos(yaw + beta)
+        #                     v * ca.sin(yaw + beta),  # dy/dt = v * sin(yaw + beta)
+        #                     delta_v,                 # d(delta)/dt = delta_v
+        #                     a,                       # dv/dt = a
+        #                     yaw_rate,                # dyaw/dt = yaw_rate
+        #                     -mu * m / (v * I * (lr + lf)) * (
+        #                                 lf ** 2 * C_Sf * (g * lr - a * h) + lr ** 2 * C_Sr * (g * lf + a * h)) * yaw_rate \
+        #                     + mu * m / (I * (lr + lf)) * (lr * C_Sr * (g * lf + a * h) - lf * C_Sf * (g * lr - a * h)) * beta \
+        #                     + mu * m / (I * (lr + lf)) * lf * C_Sf * (g * lr - a * h) * delta, # dyaw_rate/dt = RHS
+        #                     (mu / (v ** 2 * (lr + lf)) * (C_Sr * (g * lf + a * h) * lr - C_Sf * (g * lr - a * h) * lf) - 1) *
+        #                     yaw_rate \
+        #                     - mu / (v * (lr + lf)) * (C_Sr * (g * lf + a * h) + C_Sf * (g * lr - a * h)) * beta \
+        #                     + mu / (v * (lr + lf)) * (C_Sf * (g * lr - a * h)) * delta    # dbeta/dt = RHS
+        #                 ) # dx/dt = f(x,u)
 
-        RHS = ca.if_else(v > v_s, RHS, RHS_LOW_SPEED)
+        # RHS = ca.if_else(v > v_s, RHS, RHS_LOW_SPEED)
 
         # maps controls from [va, vb, vc, vd].T to [vx, vy, omega].T
         f = ca.Function('f', [states, controls], [RHS])
@@ -412,7 +413,7 @@ class NMPCPlanner:
 
         return
     
-    def mpc_prob_solve(self, goal_state, x0):
+    def mpc_prob_solve(self, reference_traj, x0, mu):
         # [x, y, delta, v_x, yaw, yaw_rate, beta]
         curr_state = ca.vertcat(
             x0["pose_x"],
@@ -424,10 +425,18 @@ class NMPCPlanner:
             x0["beta"]
         )
 
+        # self.args['p'] = ca.horzcat(
+        #     curr_state,    # current state
+        #     ca.repmat(goal_state, 1, self.config.TK)   # target state
+        # )
+        friciton_state = np.zeros_like(curr_state)
+        friciton_state[-1] = mu
         self.args['p'] = ca.horzcat(
             curr_state,    # current state
-            ca.repmat(goal_state, 1, self.config.TK)   # target state
+            reference_traj,   # target state
+            ca.DM(friciton_state)
         )
+        
         # optimization variable current state
         self.args['x0'] = ca.vertcat(
             ca.reshape(ca.repmat(curr_state, 1, self.config.TK+1), self.config.NXK*(self.config.TK+1), 1),
@@ -454,7 +463,7 @@ class NMPCPlanner:
         # Return the first control action
         return self.oa[0], self.odelta_v[0]
 
-    def plan(self, current_state):
+    def plan(self, current_state, mu=None):
         """
         Plan a trajectory using the NMPC controller.
 
@@ -464,18 +473,21 @@ class NMPCPlanner:
         Returns:
             (float, float): steering angle and acceleration
         """
+        if mu is None:
+            mu = 1.0
+
         if self.waypoints is None:
             raise ValueError(
                 "Please set waypoints to track during planner instantiation or when calling plan()"
             )
 
-        # if current_state["linear_vel_x"] < 0.1:
-        #     return self.config.MAX_ACCEL, 0.0
+        if current_state["linear_vel_x"] < 0.1:
+            return self.config.MAX_ACCEL, 0.0
 
-        # # calculate the reference trajectory
-        # self.ref_path = self.calc_ref_trajectory(
-        #     current_state, self.waypoints[0], self.waypoints[1], self.waypoints[2], self.waypoints[3]
-        # )
+        # calculate the reference trajectory
+        self.ref_path = self.calc_ref_trajectory(
+            current_state, self.waypoints[0], self.waypoints[1], self.waypoints[2], self.waypoints[3]
+        )
 
         # # Goal state is the last point in the reference trajectory
         # goal_state = self.ref_path[:, -1]
@@ -483,17 +495,18 @@ class NMPCPlanner:
         # # Goal velocity is that of the first point in the reference trajectory
         # goal_state[3] = self.ref_path[3, 0]
         
-        v_lookahead = max(current_state['linear_vel_x'], 0.1)
-        lookahead_distance = v_lookahead * (self.config.TK * self.config.DTK)
-        goal_state = self._get_current_waypoint(lookahead_distance, np.array([current_state["pose_x"], current_state["pose_y"]]))
+        # v_lookahead = max(current_state['linear_vel_x'], 0.1)
+        # lookahead_distance = v_lookahead * (self.config.TK * self.config.DTK)
+        # goal_state = self._get_current_waypoint(lookahead_distance, np.array([current_state["pose_x"], current_state["pose_y"]]))
         
-        # Ref point is the goal_state, with the velocity from the closest point
-        self.ref_point = goal_state.copy()
+        # # Ref point is the goal_state, with the velocity from the closest point
+        # self.ref_point = goal_state.copy()
 
-        closest_point = self._get_current_waypoint(0.0, np.array([current_state["pose_x"], current_state["pose_y"]]))
-        self.ref_point[3] = closest_point[3]
+        # closest_point = self._get_current_waypoint(0.0, np.array([current_state["pose_x"], current_state["pose_y"]]))
+        # self.ref_point[3] = closest_point[3]
         
         # solve the NMPC problem
-        oa, odelta_v = self.mpc_prob_solve(goal_state, current_state)
+        oa, odelta_v = self.mpc_prob_solve(self.ref_path, current_state, mu)
 
         return oa, odelta_v
+    

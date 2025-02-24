@@ -53,7 +53,7 @@ class NMPCPlannerNode(Node):
         clark_park_origin_y = 0.0 
         x = self.waypoints[:, 1] * 1.7 + clark_park_origin_x
         y = self.waypoints[:, 2] + clark_park_origin_y
-        v = np.ones_like(x) * 8.0
+        v = np.ones_like(x) * 6.0
         
         self.track = Track.from_refline(x, y, v)
         
