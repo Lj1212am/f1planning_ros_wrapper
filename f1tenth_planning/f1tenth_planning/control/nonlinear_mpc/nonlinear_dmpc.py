@@ -13,16 +13,16 @@ class mpc_config:
     NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
     TK: int = 5  # finite time horizon length kinematic
     Rk: list = field(
-        default_factory=lambda: np.diag([0.1, 0.1])
+        default_factory=lambda: np.diag([0.01, 0.01])
     )  # input cost matrix, penalty for inputs - [steering_speed, accel]
     Rd: list = field(
-        default_factory=lambda: np.diag([0.1, 0.1])
+        default_factory=lambda: np.diag([0.01, 0.01])
     )  # input difference cost matrix, penalty for change of inputs - [steering_speed, accel]
     Qk: list = field(
-        default_factory=lambda: np.diag([5.0, 5.0, 0.0, 1.0, 0.0, 0.0, 0.0])
+        default_factory=lambda: np.diag([5.0, 5.0, 0.0, 10.0, 0.0, 0.0, 0.0])
     )  # state error cost matrix, for the the next (T) prediction time steps [x, y, delta, v, yaw, yaw-rate, beta]
     Qf: list = field(
-        default_factory=lambda: np.diag([5.0, 5.0, 0.0, 1.0, 0.0, 0.0, 0.0])
+        default_factory=lambda: np.diag([5.0, 5.0, 0.0, 10.0, 0.0, 0.0, 0.0])
     )  # final state error matrix, penalty  for the final state constraints: [x, y, delta, v, yaw, yaw-rate, beta]
     N_IND_SEARCH: int = 20  # Search index number
     DTK: float = 0.1  # time step [s] kinematic
@@ -73,6 +73,8 @@ class NMPCPlanner:
             np.zeros_like(track.raceline.xs),
             np.zeros_like(track.raceline.xs),
         ]
+        print("waypoints", self.waypoints)
+        
         self.config = config
         self.oa = None
         self.odelta_v = None
@@ -85,6 +87,9 @@ class NMPCPlanner:
         self.debug = debug
         self.mpc_prob_init()
         self.max_reacquire = 20.0
+        
+        self.curr_vel = 0.0
+        self.goal_vel = 0.0
 
         self.drawn_waypoints = []
         self.waypoint_render = None
@@ -139,7 +144,7 @@ class NMPCPlanner:
         update waypoints being drawn by EnvRenderer
         """
         if self.ref_path is not None:
-            points = self.ref_path[:2].T
+            points = self.ref_path.T[:, :2]
             if self.local_plan_render is None:
                 self.local_plan_render = e.render_closed_lines(
                     points, color=(0, 128, 0), size=2
@@ -348,6 +353,8 @@ class NMPCPlanner:
     
     def mpc_prob_solve(self, reference_traj, x0, mu):
         # [x, y, delta, v_x, yaw, yaw_rate, beta]
+        self.curr_vel = x0["linear_vel_x"]
+        self.goal_vel = reference_traj[3, -1]
         curr_state = ca.vertcat(
             x0["pose_x"],
             x0["pose_y"],
@@ -389,7 +396,7 @@ class NMPCPlanner:
 
         self.ox = self.x_sol[0, :].flatten()
         self.oy = self.x_sol[1, :].flatten()
-        return self.oa[0], self.odelta_v[0]
+        return self.oa, self.odelta_v
 
     def plan(self, current_state, mu=None):
         """

@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from f1tenth_gym.envs.track import Track
 import casadi as ca
 
-from f1tenth_planning.control.nonlinear_mpc.nonlinear_frenet_dmpc import NMPCPlanner, mpc_config
+from f1tenth_planning.control.nonlinear_mpc.nonlinear_dmpc import NMPCPlanner, mpc_config
 
 # Ros2 imports
 from nav_msgs.msg import Odometry
@@ -25,9 +25,9 @@ from ackermann_msgs.msg import AckermannDriveStamped
 from geometry_msgs.msg import PoseWithCovarianceStamped, Point
 import message_filters
 from visualization_msgs.msg import MarkerArray, Marker
-from PyQt5.QtWidgets import QApplication
-from pyqtgraph.Qt import QtCore
-import pyqtgraph as pg
+# from PyQt5.QtWidgets import QApplication
+# from pyqtgraph.Qt import QtCore
+# import pyqtgraph as pg
 import threading
 import matplotlib.pyplot as plt
 from matplotlib import cm, colormaps
@@ -86,6 +86,9 @@ class NMPCPlannerNode(Node):
         self.config = mpc_config()
         self.get_logger().info('Initializing NMPC controller')
         self.planner = NMPCPlanner(track=self.track, config=self.config, debug=False)
+        self.planner.config.dlk = (
+            self.track.raceline.ss[1] - self.track.raceline.ss[0]
+        )  # waypoint spacing
         
         waypointx = self.track.raceline.xs[:waypoint_num]
         waypointy = self.track.raceline.ys[:waypoint_num]
@@ -95,6 +98,7 @@ class NMPCPlannerNode(Node):
         self.waypoints = self.waypoints[::WAYPOINTS_SUBSAMPLE_STEP, :]
         
         self.marker_pub = self.create_publisher(MarkerArray, 'marker_mpc_sol', 1)
+        self.ref_pub = self.create_publisher(MarkerArray, 'marker_ref_path', 1)
 
         self.old_steerv = 0.0
         self.old_accl = 0.0
@@ -149,6 +153,9 @@ class NMPCPlannerNode(Node):
             self.legend.addItem(self.current_location_plot, 'Current Position')
             self.legend.addItem(self.predict_traj_plot, 'Predicted Trajectory')
         self.get_logger().info('Finished initializing controller')
+        
+        self.reference_marker_array = self._init_marker_array(self.config.TK + 1, color=(0.0, 1.0, 0.0))
+        self.solution_marker_array = self._init_marker_array(self.config.TK + 1, color=(1.0, 0.0, 0.0))
 
     def update_plot(self):
         if self.points:
@@ -168,22 +175,30 @@ class NMPCPlannerNode(Node):
         Publish the MPC solution as a Marker in RViz.
         """
         if self.planner.ox is not None and self.planner.oy is not None:
-            x_arr, y_arr = [], []
-            for (s, ey) in zip(self.planner.ox, self.planner.oy):
-                x, y, _ = self.planner.track.frenet_to_cartesian(s, ey, 0.0, use_raceline=False)
-                x_arr.append(x)
-                y_arr.append(y)
-            x_arr = np.array(x_arr)
-            y_arr = np.array(y_arr)
-            points = np.array([x_arr, y_arr]).T
+            # x_arr, y_arr = [], []
+            # for (s, ey) in zip(self.planner.ox, self.planner.oy):
+            #     x, y, _ = self.planner.track.frenet_to_cartesian(s, ey, 0.0, use_raceline=False)
+            #     x_arr.append(x)
+            #     y_arr.append(y)
+            # x_arr = np.array(x_arr)
+            # y_arr = np.array(y_arr)
+            # points = np.array([x_arr, y_arr]).T
+            points = np.array([self.planner.ox, self.planner.oy]).T
+            self.publish_waypoints_as_markers(points, False)
+    
+    def render_mpc_ref(self):
+        """
+        Publish the reference trajectory as a Marker in RViz.
+        """
+        if self.planner.ref_path is not None:
+            points = self.planner.ref_path[:2, :].T
             self.publish_waypoints_as_markers(points, True)
-        
+            
     def state_callback(self, odom_msg):
         """
         Callback for Odometry updates: processes the current pose and computes a new control plan.
         Instead of integrating and publishing commands directly here, we update the shared control plan.
         """
-        print('state callback')
         if self.real_car:
             if self.initial_x is None or self.initial_y is None:
                 self.initial_x = odom_msg.pose.pose.position.x
@@ -235,15 +250,16 @@ class NMPCPlannerNode(Node):
                 # (The updated solver now returns arrays for acceleration and steering rate.)
                 oa, odelta_v = self.planner.plan(state_dict, self.mu)
                 self.render_mpc_sol()
+                self.render_mpc_ref()
                 
                 # Log cross-track error and velocities.
                 current_time = self.get_clock().now().to_msg()
                 timestamp = f"{current_time.sec}.{current_time.nanosec}"
-                cross_track_error = self.planner.ey
+                cross_track_error = 0.0 # self.planner.ey
                 current_velocity = self.planner.curr_vel
                 goal_velocity = self.planner.goal_vel
-                self.csv_writer.writerow([timestamp, cross_track_error, current_velocity, goal_velocity, position.x, position.y])
-                self.csv_file.flush()
+                # self.csv_writer.writerow([timestamp, cross_track_error, current_velocity, goal_velocity, position.x, position.y])
+                # self.csv_file.flush()
                 self.get_logger().info(f'Logged data: CTE={cross_track_error}, Curr_Vel={current_velocity}, Goal_Vel={goal_velocity}')
                 
                 # Overwrite the control plan with the new plan.
@@ -288,47 +304,59 @@ class NMPCPlannerNode(Node):
             drive_msg.drive.steering_angle = self.steering_angle
         self.pub_drive.publish(drive_msg)
     
-    def publish_waypoints_as_markers(self, waypoints=None, ref=False):
-        """ Publish waypoints as visualization markers in RViz """
+    def _init_marker_array(self, num_markers, color=(1.0, 0.0, 1.0)):
         marker_array = MarkerArray()
-        if waypoints is None:
-            waypoints = self.waypoints
-        for i, waypoint in enumerate(waypoints[:waypoint_num]):
+        for i in range(num_markers):
             marker = Marker()
             marker.header.frame_id = "map"
-            marker.type = Marker.ARROW if not ref else Marker.SPHERE
+            marker.type = Marker.ARROW
             marker.action = Marker.ADD
-            marker.id = i + 1000
-            if ref:
-                marker.scale.x = 0.2
-                marker.scale.y = 0.2
-                marker.scale.z = 0.2
-            else:
-                marker.scale.x = 1.0
-                marker.scale.y = 0.2
-                marker.scale.z = 0.2
-            marker.pose.position.x = float(waypoint[0])
-            marker.pose.position.y = float(waypoint[1])
+            marker.id = i
+            marker.scale.x = 1.0
+            marker.scale.y = 0.2
+            marker.scale.z = 0.2
+            marker.pose.position.x = 0.0
+            marker.pose.position.y = 0.0
             marker.pose.position.z = 0.2
-            if not ref:
-                yaw = float(waypoint[2])
-                q = self.yaw_to_quaternion(yaw)
-                marker.pose.orientation.x = q[0]
-                marker.pose.orientation.y = q[1]
-                marker.pose.orientation.z = q[2]
-                marker.pose.orientation.w = q[3]
-            if ref:
-                marker.color.a = 1.0
-                marker.color.r = 1.0
-                marker.color.g = 0.0
-                marker.color.b = 0.0
-            else:
-                marker.color.a = 1.0
-                marker.color.r = 1.0
-                marker.color.g = 0.0
-                marker.color.b = 1.0
+            marker.pose.orientation.x = 0.0
+            marker.pose.orientation.y = 0.0
+            marker.pose.orientation.z = 0.0
+            marker.pose.orientation.w = 1.0
+            marker.color.a = 1.0
+            marker.color.r = color[0]
+            marker.color.g = color[1]
+            marker.color.b = color[2]
             marker_array.markers.append(marker)
-        self.marker_pub.publish(marker_array)
+        return marker_array
+    
+    def _update_marker_array(self, marker_array, points):
+        num_update = len(points)
+        if(len(marker_array.markers) < len(points)):
+            num_update = len(marker_array.markers)
+            
+        for i in range(num_update):
+            marker = marker_array.markers[i]
+            marker.pose.position.x = points[i][0]
+            marker.pose.position.y = points[i][1]
+        for i in range(num_update, len(marker_array.markers)):
+            marker = marker_array.markers[i]
+            marker.action = Marker.DELETE
+            
+        return marker_array
+
+    def publish_waypoints_as_markers(self, waypoints=None, ref=False):
+        """ Publish waypoints as visualization markers in RViz """
+        if waypoints is None:
+            return
+        if ref:
+            marker_array = self.reference_marker_array
+        else:
+            marker_array = self.solution_marker_array
+        marker_array = self._update_marker_array(marker_array, waypoints)
+        if ref:
+            self.ref_pub.publish(marker_array)
+        else:
+            self.marker_pub.publish(marker_array)
     
     def quaternion_to_euler(self, orientation):
         x = orientation.x
