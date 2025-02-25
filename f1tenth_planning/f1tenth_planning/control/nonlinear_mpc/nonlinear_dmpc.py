@@ -13,10 +13,10 @@ class mpc_config:
     NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
     TK: int = 5  # finite time horizon length kinematic
     Rk: list = field(
-        default_factory=lambda: np.diag([0.01, 0.01])
+        default_factory=lambda: np.diag([0.01, 0.1])
     )  # input cost matrix, penalty for inputs - [steering_speed, accel]
     Rd: list = field(
-        default_factory=lambda: np.diag([0.01, 0.01])
+        default_factory=lambda: np.diag([0.01, 0.1])
     )  # input difference cost matrix, penalty for change of inputs - [steering_speed, accel]
     Qk: list = field(
         default_factory=lambda: np.diag([5.0, 5.0, 0.0, 10.0, 0.0, 0.0, 0.0])
@@ -95,6 +95,7 @@ class NMPCPlanner:
         self.waypoint_render = None
         self.local_plan_render = None
         self.mpc_render = None
+        self.cte = 0.0
 
     def _get_current_waypoint(self, lookahead_distance, position):
         """
@@ -181,8 +182,8 @@ class NMPCPlanner:
         ncourse = len(cx)
 
         # Find nearest index/setpoint from where the trajectories are calculated
-        _, _, _, ind = nearest_point(np.array([state["pose_x"], state["pose_y"]]), np.array([cx, cy]).T)
-
+        _, nearest_dist, _, ind = nearest_point(np.array([state["pose_x"], state["pose_y"]]), np.array([cx, cy]).T)
+        self.cte = nearest_dist
         # Load the initial parameters from the setpoint into the trajectory
         ref_traj[0, 0] = cx[ind]
         ref_traj[1, 0] = cy[ind]

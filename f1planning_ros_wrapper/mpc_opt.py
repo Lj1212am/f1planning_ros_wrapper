@@ -455,7 +455,7 @@ class MPC(Node):
 
     def pose_callback(self, pose_msg):
         vehicle_state = self.get_vehicle_state(pose_msg)
-        velocity = self.waypoints[:, 5] * 6.0
+        velocity = self.waypoints[:, 5] * 8.0
         ref_path, closest_x, closest_y = self.calc_ref_trajectory(vehicle_state, self.waypoints[:, 1], self.waypoints[:, 2], self.waypoints[:,3], velocity)
        
         ref_path_local = transform_ref_traj_to_local_frame(ref_path, vehicle_state.x, vehicle_state.y, vehicle_state.yaw)

@@ -53,7 +53,7 @@ class NMPCPlannerNode(Node):
         clark_park_origin_y = 0.0 
         x = self.waypoints[:, 1] * 1.7 + clark_park_origin_x
         y = self.waypoints[:, 2] + clark_park_origin_y
-        v = np.ones_like(x) * 6.0
+        v = np.ones_like(x) * 8.0
         
         self.track = Track.from_refline(x, y, v)
         
@@ -255,11 +255,11 @@ class NMPCPlannerNode(Node):
                 # Log cross-track error and velocities.
                 current_time = self.get_clock().now().to_msg()
                 timestamp = f"{current_time.sec}.{current_time.nanosec}"
-                cross_track_error = 0.0 # self.planner.ey
+                cross_track_error = self.planner.cte
                 current_velocity = self.planner.curr_vel
                 goal_velocity = self.planner.goal_vel
-                # self.csv_writer.writerow([timestamp, cross_track_error, current_velocity, goal_velocity, position.x, position.y])
-                # self.csv_file.flush()
+                self.csv_writer.writerow([timestamp, cross_track_error, current_velocity, goal_velocity, position.x, position.y])
+                self.csv_file.flush()
                 self.get_logger().info(f'Logged data: CTE={cross_track_error}, Curr_Vel={current_velocity}, Goal_Vel={goal_velocity}')
                 
                 # Overwrite the control plan with the new plan.
