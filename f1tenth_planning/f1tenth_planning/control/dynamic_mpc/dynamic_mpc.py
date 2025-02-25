@@ -141,13 +141,22 @@ class STMPCPlanner:
         self.debug = debug
 
         self.drawn_waypoints = []
+        self.waypoint_render = None
+        self.local_plan_render = None
+        self.mpc_render = None
+
 
     def render_waypoints(self, e):
         """
         update waypoints being drawn by EnvRenderer
         """
         points = np.array(self.waypoints).T[:, :2]
-        e.render_closed_lines(points, color=(128, 0, 0), size=1)
+        if self.waypoint_render is None:
+            self.waypoint_render = e.render_closed_lines(
+                points, color=(128, 0, 0), size=1
+            )
+        else:
+            self.waypoint_render.setData(points)
 
     def render_local_plan(self, e):
         """
@@ -155,14 +164,23 @@ class STMPCPlanner:
         """
         if self.ref_path is not None:
             points = self.ref_path[:2].T
-            e.render_lines(points, color=(0, 128, 0), size=2)
+            if self.local_plan_render is None:
+                self.local_plan_render = e.render_closed_lines(
+                    points, color=(0, 128, 0), size=2
+                )
+            else:
+                self.local_plan_render.setData(points)
 
     def render_mpc_sol(self, e):
         """
         Callback to render the lookahead point.
         """
         if self.ox is not None and self.oy is not None:
-            e.render_lines(np.array([self.ox, self.oy]).T, color=(0, 0, 128), size=2)
+            points = np.array([self.ox, self.oy]).T
+            if self.mpc_render is None:
+                self.mpc_render = e.render_lines(points, color=(0, 0, 128), size=2)
+            else:
+                self.mpc_render.setData(points)
 
     def plan(self, states, waypoints=None):
         """
