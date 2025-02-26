@@ -14,13 +14,13 @@ class mpc_config:
     NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
     TK: int = 7   # finite time horizon length kinematic
     Rk: list = field(
-        default_factory=lambda: np.diag([0.4, 1.0])
+        default_factory=lambda: np.diag([1.0, 1.0])
     )  # input cost matrix, penalty for inputs - [steering_speed, accel]
     Rd: list = field(
-        default_factory=lambda: np.diag([0.4, 1.0])
+        default_factory=lambda: np.diag([1.0, 1.0])
     )  # input difference cost matrix, penalty for change of inputs - [steering_speed, accel]
     Qk: list = field(
-        default_factory=lambda: np.diag([5.0, 5.0, 0.0, 15.0, 0.0, 0.0, 0.0])
+        default_factory=lambda: np.diag([5.0, 5.0, 0.0, 5.0, 0.0, 0.0, 0.0])
     )  # state error cost matrix, for the the next (T) prediction time steps [x, y, delta, v, yaw, yaw-rate, beta]
     Qf: list = field(
         default_factory=lambda: np.diag([5.0, 5.0, 0.0, 5.0, 0.0, 0.0, 0.0])
