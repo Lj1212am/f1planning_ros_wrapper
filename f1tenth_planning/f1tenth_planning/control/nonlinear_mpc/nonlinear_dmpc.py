@@ -3,6 +3,7 @@ NMPC waypoint tracker using CasADi. On init, takes in model equation.
 """
 from dataclasses import dataclass, field
 import numpy as np
+import time
 from f1tenth_planning.utils.utils import nearest_point, intersect_point
 from f1tenth_gym.envs.track import Track
 import casadi as ca
@@ -11,18 +12,18 @@ import casadi as ca
 class mpc_config:
     NXK: int = 7  # length of kinematic state vector: z = [x, y, delta, v_x, yaw, yaw_rate, beta]
     NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
-    TK: int = 5  # finite time horizon length kinematic
+    TK: int = 7   # finite time horizon length kinematic
     Rk: list = field(
-        default_factory=lambda: np.diag([0.01, 0.1])
+        default_factory=lambda: np.diag([1.0, 1.0])
     )  # input cost matrix, penalty for inputs - [steering_speed, accel]
     Rd: list = field(
-        default_factory=lambda: np.diag([0.01, 0.1])
+        default_factory=lambda: np.diag([1.0, 1.0])
     )  # input difference cost matrix, penalty for change of inputs - [steering_speed, accel]
     Qk: list = field(
-        default_factory=lambda: np.diag([5.0, 5.0, 0.0, 10.0, 0.0, 0.0, 0.0])
+        default_factory=lambda: np.diag([5.0, 5.0, 0.0, 15.0, 0.0, 0.0, 0.0])
     )  # state error cost matrix, for the the next (T) prediction time steps [x, y, delta, v, yaw, yaw-rate, beta]
     Qf: list = field(
-        default_factory=lambda: np.diag([5.0, 5.0, 0.0, 10.0, 0.0, 0.0, 0.0])
+        default_factory=lambda: np.diag([5.0, 5.0, 0.0, 5.0, 0.0, 0.0, 0.0])
     )  # final state error matrix, penalty  for the final state constraints: [x, y, delta, v, yaw, yaw-rate, beta]
     N_IND_SEARCH: int = 20  # Search index number
     DTK: float = 0.1  # time step [s] kinematic
@@ -336,9 +337,9 @@ class NMPCPlanner:
         ipopt_opts = {
             "ipopt": {
                 "print_level": 1,
-                "max_iter": 4000,
-                "acceptable_tol": 1e-4,
-                "acceptable_obj_change_tol": 1e-3,
+                "max_iter": 1000,
+                "acceptable_tol": 1e-2,
+                "acceptable_obj_change_tol": 1e-1,
                 "warm_start_init_point": "yes",
                 "linear_solver": "mumps",
                 # "hessian_approximation": "limited-memory",
@@ -420,6 +421,7 @@ class NMPCPlanner:
         if current_state["linear_vel_x"] < 0.1:
             return self.config.MAX_ACCEL, 0.0
 
+        t0 = time.time()
         # calculate the reference trajectory
         self.ref_path = self.calc_ref_trajectory(
             current_state, self.waypoints[0], self.waypoints[1], self.waypoints[2], self.waypoints[3]
@@ -427,6 +429,7 @@ class NMPCPlanner:
 
         # solve the NMPC problem
         oa, odelta_v = self.mpc_prob_solve(self.ref_path, current_state, mu)
+        print(f"Time taken to solve: {time.time() - t0}")
 
         return oa, odelta_v
     

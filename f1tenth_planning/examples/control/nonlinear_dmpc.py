@@ -5,18 +5,79 @@ Casadi KMPC waypoint tracker example
 import numpy as np
 import gymnasium as gym
 from f1tenth_gym.envs import F110Env
+from f1tenth_gym.envs.track import Track
 import time
 import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from f1tenth_planning.control.nonlinear_mpc.nonlinear_dmpc import NMPCPlanner
+import matplotlib.pyplot as plt
+from scipy.interpolate import CubicSpline
 
+
+waypoint_first = 0
+waypoint_num = -1
+
+def custom_waypoints_to_track(csv_file):
+    config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
+
+    # csv = 'wp_20241125_132733.csv'
+    # csv = 'interpolated_wp.csv'
+    csv = csv_file
+    # csv = 'interpolated_wp.csv'
+    map_name = os.path.join(config_path, csv)
+    waypoints = np.loadtxt(map_name, delimiter=';', skiprows=2) 
+
+    # map_name = os.path.join(config_path, csv)
+    # waypoints = np.loadtxt(map_name, delimiter=';', skiprows=15*2) 
+    
+    # waypoints[:, 3] += math.pi/2
+    sin_yaw = np.sin(waypoints[:, 3])
+    cos_yaw = np.cos(waypoints[:, 3])
+    
+    x = waypoints[:, 1]
+    y = waypoints[:, 2]
+    v = waypoints[:, 5]
+
+    # x = x[waypoint_first:waypoint_num]
+    # y = y[waypoint_first:waypoint_num] 
+    # v = v[waypoint_first:waypoint_num] * 3.0
+    v = 8.0 * v
+
+    #filter topull 1 from every ten waypoints, to make the path smoother
+    # x = x[::10]
+    # y = y[::10]
+    # v = v[::10]
+    
+    # make sure cubic spline won't fail
+    distances = np.sqrt(np.diff(x)**2 + np.diff(y)**2)
+    t = np.concatenate(([0], np.cumsum(distances)))  # Parameter t (cumulative distance)
+
+    # Remove points where `t` values are not strictly increasing
+    mask = np.diff(t) > 1e-6  # Keep points where the difference in `t` is significant
+    mask = np.insert(mask, 0, True)  # Always include the first point
+    x = x[mask]
+    y = y[mask]
+    v = v[mask]
+    t = t[mask]
+
+    # INTERPOLATE MANUALLY USING CUBIC SPLINE
+    # Create a cubic spline object
+    spline = CubicSpline(t, np.c_[x, y, v], bc_type='natural')
+    # Interpolate the spline at a higher resolution
+    t_interp = np.linspace(t[0], t[-1], num=100)
+    x_interp, y_interp, v_interp = spline(t_interp).T
+    # Create a new track object
+    track = Track.from_refline(x_interp, y_interp, v_interp)
+    return track
 
 def main():
     """
     KMPC example. This example uses fixed waypoints throughout the 2 laps.
     For an example using dynamic waypoints, see the lane switcher example.
     """
+    wp_track = custom_waypoints_to_track('rotated_safe_slalom.csv')
+
 
     # create environment
     env: F110Env = gym.make(
@@ -32,10 +93,11 @@ def main():
     )
 
     # create planner
-    planner = NMPCPlanner(track=env.track, debug=False)
+    planner = NMPCPlanner(track=wp_track, debug=False)
     planner.config.dlk = (
-        env.track.raceline.ss[1] - env.track.raceline.ss[0]
+        wp_track.raceline.ss[11] - wp_track.raceline.ss[10]
     )  # waypoint spacing
+    # planner.config.dlk = 0.1  # waypoint spacing
     env.unwrapped.add_render_callback(planner.render_waypoints)
     env.unwrapped.add_render_callback(planner.render_local_plan)
     env.unwrapped.add_render_callback(planner.render_mpc_sol)
@@ -86,6 +148,8 @@ def main():
         else:
             start = time.time()
             accl, steerv = planner.plan(ego_obs)
+            accl = accl[0]
+            steerv = steerv[0]
             print('planning Hz:', 1/(time.time() - start))
             
         obs, timestep, terminated, truncated, info = env.step(
