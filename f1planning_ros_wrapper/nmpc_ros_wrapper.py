@@ -32,6 +32,7 @@ import threading
 import matplotlib.pyplot as plt
 from matplotlib import cm, colormaps
 from matplotlib.colors import Normalize
+from friction_interfaces.msg import Float32Stamped
 
 # from 0 - 1000
 waypoint_num = -1
@@ -53,7 +54,7 @@ class NMPCPlannerNode(Node):
         clark_park_origin_y = 0.0 
         x = self.waypoints[:, 1] * 1.7 + clark_park_origin_x
         y = self.waypoints[:, 2] + clark_park_origin_y
-        v = np.ones_like(x) * 8.0
+        v = np.ones_like(x) * 7.0
         
         self.track = Track.from_refline(x, y, v)
         
@@ -80,7 +81,7 @@ class NMPCPlannerNode(Node):
         self.sub_ackermann = self.create_subscription(AckermannDriveStamped, drive_topic, self.ackerman_callback, 1)
         self.pub_drive = self.create_publisher(AckermannDriveStamped, drive_topic, 1)
         self.pub_mpc_sol = self.create_publisher(Marker, 'mpc_solution', 10)
-        self.sub_mu = self.create_subscription(Float32, 'friction_value', self.friction_callback, 10) 
+        self.sub_mu = self.create_subscription(Float32Stamped, 'friction_value', self.friction_callback, 10) 
 
         self.get_logger().info('Setting NMPC configuration')
         self.config = mpc_config()
