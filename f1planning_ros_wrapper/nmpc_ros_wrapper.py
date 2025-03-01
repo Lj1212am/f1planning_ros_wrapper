@@ -10,7 +10,7 @@ import sys
 import math
 import os
 
-sys.path.append('/home/nvidia/ros_ws/src/f1planning_ros_wrapper/f1tenth_planning')
+sys.path.append('/home/lee/work/f1-fifth/src/f1planning_ros_wrapper/f1tenth_planning')
 
 #NMPC Imports
 from dataclasses import dataclass, field
@@ -18,8 +18,9 @@ from f1tenth_gym.envs.track import Track
 import casadi as ca
 
 
-from f1tenth_planning.control.nonlinear_mpc.nonlinear_dmpc import NMPCPlanner, mpc_config
+# from f1tenth_planning.control.nonlinear_mpc.nonlinear_frenet_dmpc import NMPCPlanner, mpc_config
 
+from f1tenth_planning.control.nonlinear_mpc.nonlinear_dmpc import NMPCPlanner, mpc_config
 
 # Ros2 imports
 from nav_msgs.msg import Odometry
@@ -45,7 +46,7 @@ class NMPCPlannerNode(Node):
         # Declare a ROS parameter for the output CSV file name suffix
         self.declare_parameter('csv_suffix', 'nmpc')
 
-        self.config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
+        self.config_path = "/home/lee/work/f1-fifth/src/trajectory_csv"
         
         self.csv = "rotated_safe_slalom.csv"
         # self.csv = "Spielberg_blank_raceline.csv"
@@ -71,7 +72,7 @@ class NMPCPlannerNode(Node):
         
         # v = np.sqrt(velx**2 + vely**2)
         # v = self.waypoints[:, 5]
-        v = np.ones_like(x)  * 7.0
+        v = np.ones_like(x)  * 5.0
         
         
         # Now pass the processed x, y, and velx to the Track class
@@ -83,7 +84,7 @@ class NMPCPlannerNode(Node):
         csv_suffix = self.get_parameter('csv_suffix').get_parameter_value().string_value
 
         # Construct the output CSV file name
-        self.csv_path = "/home/nvidia/ros_ws/src/f1planning_ros_wrapper/real_world_results"
+        self.csv_path = "/home/lee/work/f1-fifth/src/f1planning_ros_wrapper/real_world_results"
         self.output_csv_file = f"cross_track_error_log_{csv_suffix}.csv"
 
         self.output_csv_path = os.path.join(self.csv_path, self.output_csv_file)
@@ -98,8 +99,10 @@ class NMPCPlannerNode(Node):
         if self.real_car:
             # odom_topic = '/transformed/odometry'
             odom_topic = '/gnss_to_local/odometry'
+            
         else:
-            odom_topic = '/ego_racecar/odom'
+            # odom_topic = '/ego_racecar/odom'
+            odom_topic = '/fixposition/odometry'
 
         self.initial_x = 0.0 #None
         self.initial_y = 0.0 #None
@@ -319,7 +322,8 @@ class NMPCPlannerNode(Node):
         
         try:
             accl, steerv = self.planner.plan(state_dict, self.mu)
-            # self.render_mpc_sol()
+            # print('accl', accl, 'steerv', steerv)
+            # # self.render_mpc_sol()
             accl = accl[0]
             steerv = steerv[0]
 

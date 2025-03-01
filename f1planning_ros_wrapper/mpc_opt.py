@@ -181,15 +181,18 @@ class mpc_config:
     N_IND_SEARCH: int = 20
     DTK: float = 0.1
     dlk: float = 0.03
-    LENGTH: float = 0.9
+    LENGTH: float = 0.88392 + 1.50876
     WIDTH: float = 0.54
-    WB: float = 0.53
-    MIN_STEER: float = -0.4189
-    MAX_STEER: float = 0.4189
-    MAX_DSTEER: float = np.deg2rad(180.0)
-    MAX_SPEED: float = 12.0
-    MIN_SPEED: float = 0.0
-    MAX_ACCEL: float = 3.0 
+    WB: float = 0.88392 + 1.50876
+    MIN_STEER: float = -0.91  # minimum steering angle [rad] (from YAML: steering.min)
+    MAX_STEER: float = 0.91   # maximum steering angle [rad] (from YAML: steering.max)
+    MIN_DSTEER: float = -0.4  # minimum steering speed [rad/s] (from YAML: steering.v_min)
+    MAX_DSTEER: float = 0.4   # maximum steering speed [rad/s] (from YAML: steering.v_max)
+    MAX_SPEED: float = 45.8   # maximum velocity [m/s] (from YAML: longitudinal.v_max)
+    MIN_SPEED: float = -13.9  # minimum velocity [m/s] (from YAML: longitudinal.v_min)
+    MAX_ACCEL: float = 11.5   # maximum acceleration [m/s²] (from YAML: longitudinal.a_max)
+    MIN_ACCEL: float = -11.5  # minimum acceleration [m/s²] (assumed symmetric)
+
 
     """
     N_IND_SEARCH: int = 20  # Search index number
@@ -307,7 +310,7 @@ class MPC(Node):
         self.plot = False
 
         self.real_car = False
-        self.config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
+        self.config_path = "/home/lee/work/f1-fifth/src/trajectory_csv"
 
         self.declare_parameter('csv_suffix', 'kin_mpc')
 
@@ -315,7 +318,7 @@ class MPC(Node):
         csv_suffix = self.get_parameter('csv_suffix').get_parameter_value().string_value
 
 
-        self.csv_path = "/home/nvidia/ros_ws/src/f1planning_ros_wrapper/real_world_results"
+        self.csv_path = "/home/lee/work/f1-fifth/src/f1planning_ros_wrapper/real_world_results"
         self.output_csv_file = f"cross_track_error_log_{csv_suffix}.csv"
 
         self.output_csv_path = os.path.join(self.csv_path, self.output_csv_file)
@@ -370,7 +373,8 @@ class MPC(Node):
             odom_topic = '/gnss_to_local/local_position'
             # odom_topic = '/transformed/odometry'
         else:
-            odom_topic = '/ego_racecar/odom'
+            # odom_topic = '/ego_racecar/odom'
+            odom_topic = 'fixposition/odometry'
 
         if self.real_car:
             self.sub_pose = self.create_subscription(PoseWithCovarianceStamped, odom_topic, self.pose_callback, 1)
@@ -455,7 +459,7 @@ class MPC(Node):
 
     def pose_callback(self, pose_msg):
         vehicle_state = self.get_vehicle_state(pose_msg)
-        velocity = self.waypoints[:, 5] * 7.0
+        velocity = self.waypoints[:, 5] * 1.0
         ref_path, closest_x, closest_y = self.calc_ref_trajectory(vehicle_state, self.waypoints[:, 1], self.waypoints[:, 2], self.waypoints[:,3], velocity)
        
         ref_path_local = transform_ref_traj_to_local_frame(ref_path, vehicle_state.x, vehicle_state.y, vehicle_state.yaw)

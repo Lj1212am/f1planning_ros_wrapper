@@ -10,42 +10,91 @@ import casadi as ca
 
 @dataclass
 class mpc_config:
-    NXK: int = 7  # length of kinematic state vector: z = [x, y, delta, v_x, yaw, yaw_rate, beta]
-    NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
-    TK: int = 7   # finite time horizon length kinematic
-    Rk: list = field(
-        default_factory=lambda: np.diag([1.0, 1.0])
-    )  # input cost matrix, penalty for inputs - [steering_speed, accel]
-    Rd: list = field(
-        default_factory=lambda: np.diag([1.0, 1.0])
-    )  # input difference cost matrix, penalty for change of inputs - [steering_speed, accel]
-    Qk: list = field(
-        default_factory=lambda: np.diag([5.0, 5.0, 0.0, 5.0, 0.0, 0.0, 0.0])
-    )  # state error cost matrix, for the the next (T) prediction time steps [x, y, delta, v, yaw, yaw-rate, beta]
-    Qf: list = field(
-        default_factory=lambda: np.diag([5.0, 5.0, 0.0, 5.0, 0.0, 0.0, 0.0])
-    )  # final state error matrix, penalty  for the final state constraints: [x, y, delta, v, yaw, yaw-rate, beta]
-    N_IND_SEARCH: int = 20  # Search index number
-    DTK: float = 0.1  # time step [s] kinematic
-    dlk: float = 0.03  # dist step [m] kinematic
-    MIN_STEER: float = -0.4189  # maximum steering angle [rad]
-    MAX_STEER: float = 0.4189  # maximum steering angle [rad]
-    MIN_DSTEER: float = -3.2  # maximum steering speed [rad/s]
-    MAX_DSTEER: float = 3.2  # maximum steering speed [rad/s]
-    MAX_SPEED: float = 20.0  # maximum speed [m/s]
-    MIN_SPEED: float = 0.0  # minimum backward speed [m/s]
-    MAX_ACCEL: float = 9.51  # maximum acceleration [m/ss]
-    MIN_ACCEL: float = -9.51  # minimum acceleration [m/ss]
+    # Kinematic model dimensions
+    NXK: int = 7  # state: [x, y, delta, v_x, yaw, yaw_rate, beta]
+    NU: int = 2   # inputs: [steering speed, acceleration]
+    TK: int = 7   # prediction horizon
 
-    # Vehicle parameters
-    MU: float = 1.1 # friction coefficient
-    C_SF: float = 5.3507 # front cornering stiffness
-    C_SR: float = 5.3507 # rear cornering stiffness
-    LF: float = 0.2735 # distance from center of gravity to front axle
-    LR: float = 0.2585 # distance from center of gravity to rear axle
-    H: float = 0.1825 # height of center of gravity
-    M: float = 15.32 # mass of vehicle
-    I: float = 0.64332 # moment of inertia
+    # Cost matrices
+    Rk: np.ndarray = field(default_factory=lambda: np.diag([1.0, 1.0]))  # penalty on inputs [steering_speed, accel]
+    Rd: np.ndarray = field(default_factory=lambda: np.diag([1.0, 1.0]))  # penalty on input differences
+    Qk: np.ndarray = field(default_factory=lambda: np.diag([5.0, 5.0, 0.0, 5.0, 0.0, 0.0, 0.0]))  # stage cost on state errors
+    Qf: np.ndarray = field(default_factory=lambda: np.diag([5.0, 5.0, 0.0, 5.0, 0.0, 0.0, 0.0]))  # terminal cost on state errors
+
+    # Discretization parameters
+    N_IND_SEARCH: int = 20   # search index number for planning
+    DTK: float = 0.1         # MPC time step [s]
+    dlk: float = 0.03        # distance step [m] for spatial discretization
+
+    # Steering constraints (using YAML "steering" values)
+    MIN_STEER: float = -0.91  # minimum steering angle [rad] (from YAML: steering.min)
+    MAX_STEER: float = 0.91   # maximum steering angle [rad] (from YAML: steering.max)
+    MIN_DSTEER: float = -0.4  # minimum steering speed [rad/s] (from YAML: steering.v_min)
+    MAX_DSTEER: float = 0.4   # maximum steering speed [rad/s] (from YAML: steering.v_max)
+
+    # Longitudinal constraints (using YAML "longitudinal" values)
+    MAX_SPEED: float = 45.8   # maximum velocity [m/s] (from YAML: longitudinal.v_max)
+    MIN_SPEED: float = -13.9  # minimum velocity [m/s] (from YAML: longitudinal.v_min)
+    MAX_ACCEL: float = 11.5   # maximum acceleration [m/s²] (from YAML: longitudinal.a_max)
+    MIN_ACCEL: float = -11.5  # minimum acceleration [m/s²] (assumed symmetric)
+
+    # Vehicle geometric and inertial parameters (from YAML)
+    LF: float = 0.88392      # distance from CG to front axle [m] (YAML: a)
+    LR: float = 1.50876      # distance from CG to rear axle [m] (YAML: b)
+    M: float = 1225.8878467253344  # vehicle mass [kg] (YAML: m)
+    I: float = 1538.8533713561394  # yaw moment of inertia [kg·m²] (YAML: I_z)
+    H = 0.557784  # height of CG [m] (assumed, not in YAML)
+    
+    # (Optional) Additional parameters that might be needed for a full-scale vehicle model:
+    MU: float = 1.1          # friction coefficient (as used in your config)
+    C_SF: float = 5.3507     # front cornering stiffness [N/rad]
+    C_SR: float = 5.3507     # rear cornering stiffness [N/rad]
+    
+
+# @dataclass
+# class mpc_config:
+#     NXK: int = 7  # length of kinematic state vector: z = [x, y, delta, v_x, yaw, yaw_rate, beta]
+#     NU: int = 2  # length of input vector: u = = [steering speed, acceleration]
+#     TK: int = 7   # finite time horizon length kinematic
+#     Rk: list = field(
+#         default_factory=lambda: np.diag([1.0, 1.0])
+#     )  # input cost matrix, penalty for inputs - [steering_speed, accel]
+#     Rd: list = field(
+#         default_factory=lambda: np.diag([1.0, 1.0])
+#     )  # input difference cost matrix, penalty for change of inputs - [steering_speed, accel]
+#     Qk: list = field(
+#         default_factory=lambda: np.diag([5.0, 5.0, 0.0, 5.0, 0.0, 0.0, 0.0])
+#     )  # state error cost matrix, for the the next (T) prediction time steps [x, y, delta, v, yaw, yaw-rate, beta]
+#     Qf: list = field(
+#         default_factory=lambda: np.diag([5.0, 5.0, 0.0, 5.0, 0.0, 0.0, 0.0])
+#     )  # final state error matrix, penalty  for the final state constraints: [x, y, delta, v, yaw, yaw-rate, beta]
+#     N_IND_SEARCH: int = 20  # Search index number
+#     DTK: float = 0.1  # time step [s] kinematic
+#     dlk: float = 0.03  # dist step [m] kinematic
+#     MIN_STEER: float = -0.4189  # maximum steering angle [rad]
+#     MAX_STEER: float = 0.4189  # maximum steering angle [rad]
+#     MIN_DSTEER: float = -3.2  # maximum steering speed [rad/s]
+#     MAX_DSTEER: float = 3.2  # maximum steering speed [rad/s]
+#     MAX_SPEED: float = 20.0  # maximum speed [m/s]
+#     MIN_SPEED: float = 0.0  # minimum backward speed [m/s]
+#     MAX_ACCEL: float = 9.51  # maximum acceleration [m/ss]
+#     MIN_ACCEL: float = -9.51  # minimum acceleration [m/ss]
+
+#     # Vehicle parameters
+#     # MU: float = 1.1 # friction coefficient
+#     # C_SF: float = 5.3507 # front cornering stiffness
+#     # C_SR: float = 5.3507 # rear cornering stiffness
+#     # LF: float = 0.2735 # distance from center of gravity to front axle
+#     # LR: float = 0.2585 # distance from center of gravity to rear axle
+#     # H: float = 0.1825 # height of center of gravity
+#     # M: float = 15.32 # mass of vehicle
+#     # I: float = 0.64332 # moment of inertia
+    
+#     #Full scale vehicle parameters
+#     MU: float = 1.1 # friction coefficient
+#     C_SF: float = 5.3507 # front cornering stiffness
+#     C_SR: float = 5.3507 # rear cornering stiffness
+    
 
 class NMPCPlanner:
     """
@@ -399,7 +448,7 @@ class NMPCPlanner:
         self.ox = self.x_sol[0, :].flatten()
         self.oy = self.x_sol[1, :].flatten()
         return self.oa, self.odelta_v
-
+    
     def plan(self, current_state, mu=None):
         """
         Plan a trajectory using the NMPC controller.
