@@ -53,8 +53,8 @@ class mpc_config:
     
     # (Optional) Additional parameters that might be needed for a full-scale vehicle model:
     MU: float = 1.1          # friction coefficient (as used in your config)
-    C_SF: float = 5.3507     # front cornering stiffness [N/rad]
-    C_SR: float = 5.3507     # re
+    C_SF: float = 21.92     # front cornering stiffness [N/rad]
+    C_SR: float = 21.92     # re
     
     # MIN_STEER: float = -0.4189  # maximum steering angle [rad]
     # MAX_STEER: float = 0.4189  # maximum steering angle [rad]

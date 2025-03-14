@@ -57,12 +57,12 @@ class mpc_config:
     N_IND_SEARCH: int = 20  # Search index number
     DTK: float = 0.1  # time step [s] kinematic
     dlk: float = 0.03  # dist step [m] kinematic
-    LENGTH: float = 0.58  # Length of the vehicle [m]
-    WIDTH: float = 0.31  # Width of the vehicle [m]
-    WB: float = 0.33  # Wheelbase [m]
-    MIN_STEER: float = -0.4189  # maximum steering angle [rad]
-    MAX_STEER: float = 0.4189  # maximum steering angle [rad]
-    MAX_DSTEER: float = np.deg2rad(180.0)  # maximum steering speed [rad/s]
+    LENGTH: float = 4.298  # Length of the vehicle [m]
+    WIDTH: float = 1.674  # Width of the vehicle [m]
+    WB: float = 2.39268  # Wheelbase [m] = 0.88392+1.50876
+    MIN_STEER: float = -0.91  # maximum steering angle [rad]
+    MAX_STEER: float = 0.91  # maximum steering angle [rad]
+    MAX_DSTEER: float = 0.4  # maximum steering speed [rad/s]
     MAX_SPEED: float = 8.0  # maximum speed [m/s]
     MIN_SPEED: float = 0.0  # minimum backward speed [m/s]
     MAX_ACCEL: float = 3.0  # maximum acceleration [m/ss]

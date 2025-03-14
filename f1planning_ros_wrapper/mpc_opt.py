@@ -12,12 +12,13 @@ import numpy as np
 import rclpy
 from ackermann_msgs.msg import AckermannDriveStamped
 from geometry_msgs.msg import PoseWithCovarianceStamped
+from visualization_msgs.msg import MarkerArray, Marker
 from rclpy.node import Node
 from scipy.linalg import block_diag
 from scipy.sparse import block_diag, csc_matrix, diags
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
-from utils import nearest_point
+from .utils import nearest_point
 from PyQt5.QtWidgets import QApplication
 from pyqtgraph.Qt import QtCore
 import pyqtgraph as pg
@@ -152,10 +153,6 @@ def calc_ref_trajectory_jitted(x, y, v, yaw, NXK, TK, DTK, dlk, cx, cy, cyaw, sp
             cyaw[i] += 2*np.pi """
         cyaw_continuous = np.arctan2(sin_yaw, cos_yaw)
         ref_traj[3, :] = cyaw_continuous[ind_list]
-
-    # ref_traj[3, :] = cyaw[ind_list]
-
-
     return ref_traj
 
 @dataclass
@@ -166,10 +163,10 @@ class mpc_config:
 
     # TODO: you may need to tune the following matrices
     Rk: list = field(
-        default_factory=lambda: np.diag([10, 100.0])
+        default_factory=lambda: np.diag([0.1, 100.0])
     )  # input cost matrix, penalty for inputs - [accel, steering_speed]
     Rdk: list = field(
-        default_factory=lambda: np.diag([0.01, 100.0])
+        default_factory=lambda: np.diag([0.1, 100.0])
     )  # input difference cost matrix, penalty for change of inputs - [accel, steering_speed]
     Qk: list = field(
         default_factory=lambda: np.diag([10.5, 10.5, 25.5, 13.0])  
@@ -181,12 +178,12 @@ class mpc_config:
     N_IND_SEARCH: int = 20
     DTK: float = 0.1
     dlk: float = 0.03
-    LENGTH: float = 0.88392 + 1.50876
-    WIDTH: float = 0.54
-    WB: float = 0.88392 + 1.50876
-    MIN_STEER: float = -0.91  # minimum steering angle [rad] (from YAML: steering.min)
-    MAX_STEER: float = 0.91   # maximum steering angle [rad] (from YAML: steering.max)
-    MIN_DSTEER: float = -0.4  # minimum steering speed [rad/s] (from YAML: steering.v_min)
+    LENGTH: float = 4.298  # Length of the vehicle [m]
+    WIDTH: float = 1.674  # Width of the vehicle [m]
+    WB: float = 2.39268  # Wheelbase [m] = 0.88392+1.50876
+    MIN_STEER: float = -0.91  # maximum steering angle [rad]
+    MAX_STEER: float = 0.91  # maximum steering angle [rad]
+    MIN_DSTEER: float = -0.4  # maximum steering speed [rad/s]
     MAX_DSTEER: float = 0.4   # maximum steering speed [rad/s] (from YAML: steering.v_max)
     MAX_SPEED: float = 45.8   # maximum velocity [m/s] (from YAML: longitudinal.v_max)
     MIN_SPEED: float = -13.9  # minimum velocity [m/s] (from YAML: longitudinal.v_min)
@@ -260,19 +257,9 @@ def transform_ref_traj_to_local_frame(ref_traj: np.array, x, y, yaw):
     ref_traj_yaw = np.unwrap(ref_traj_yaw)
     ref_traj_yaw = smooth_yaw(ref_traj_yaw)
 
-
     # Step 5: Normalize yaw to lie within [-π, π]
     ref_traj_yaw = np.arctan2(np.sin(ref_traj_yaw), np.cos(ref_traj_yaw))
-
-
-
     ref_traj_yaw = calc_yaw_from_xy(ref_traj_pose[0,:], ref_traj_pose[1,:])
-    # Debugging: Print corrected yaw
-    # print(f"Transformed Yaw (Local Frame): {ref_traj_yaw}")
-
-    # if abs(ref_traj_yaw[0]) > 0.1:
-    #     print('ref traj', ref_traj_yaw)
-    #     print('yaw input', yaw)
 
     # Step 6: Update the transformed trajectory
     ref_traj[:2, :] = ref_traj_pose
@@ -310,15 +297,14 @@ class MPC(Node):
         self.plot = False
 
         self.real_car = False
-        self.config_path = "/home/lee/work/f1-fifth/src/trajectory_csv"
+        self.config_path = "/home/ahmad/Research/ros_ws/src/f1planning_ros_wrapper/resource/"
 
         self.declare_parameter('csv_suffix', 'kin_mpc')
 
         # Get the CSV suffix from the parameter
         csv_suffix = self.get_parameter('csv_suffix').get_parameter_value().string_value
 
-
-        self.csv_path = "/home/lee/work/f1-fifth/src/f1planning_ros_wrapper/real_world_results"
+        self.csv_path = "/home/ahmad/Research/ros_ws/src/f1planning_ros_wrapper/real_world_results"
         self.output_csv_file = f"cross_track_error_log_{csv_suffix}.csv"
 
         self.output_csv_path = os.path.join(self.csv_path, self.output_csv_file)
@@ -329,9 +315,7 @@ class MPC(Node):
         
         self.csv_file = open(self.output_csv_path, 'a', newline='')
         self.csv_writer = csv.writer(self.csv_file)
-        
-
-
+  
         # for trajectory csv files:
         # self.csv = "interpolated_trajectory_3.csv"
         # self.csv = 'wp_20241125_132733.csv'
@@ -340,33 +324,50 @@ class MPC(Node):
         self.map_name = os.path.join(self.config_path, self.csv)
         self.waypoints = np.loadtxt(self.map_name, delimiter=';', skiprows=1) 
 
-
         WAYPOINTS_END = -1
-        WAYPOINTS_SCALE = 1.0
+        self.waypoints_scale = 10.0
+        desired_velocity = 5.0
         self.waypoints = self.waypoints[:WAYPOINTS_END,:]
         self.waypoints[:, 1] *= 1.7 
-        # self.waypoints[:, 3] += math.pi/2
-        # self.waypoints[:, 3] = np.unwrap(self.waypoints[:, 3])
-        # self.waypoints[:, 1:3] *= WAYPOINTS_SCALE
-        # self.sin_yaw = np.sin(self.waypoints[:, 3])
-        # self.cos_yaw = np.cos(self.waypoints[:, 3])
-        # # 
 
-        # for waypoint csv files:
-        # waypoints = np.loadtxt(self.map_name, delimiter=',', skiprows=1) 
+        # Scale the waypoints.
+        scaled = self.waypoints[:, 1:3] * self.waypoints_scale
 
-        # waypoint_x = waypoints[:, 0]
-        # waypoint_y = waypoints[:, 1]
-        # waypoint_z = waypoints[:, 2]
-        # waypoint_v = waypoints[:, 3]
-        # self.waypoints = np.column_stack((np.ones(waypoint_x.shape), waypoint_x, waypoint_y, np.ones(waypoint_x.shape), np.ones(waypoint_x.shape), waypoint_v))
+        # Undo the centering to retain the original global position
+        # CENTER ARTIFICIAL at 16.5, 8.5 
+        center = np.array([
+            0, 14
+        ])
+        self.waypoints[:, 1:3] = scaled - center
 
-
+        # Increase all the velocities by self.waypoints_scale
+        self.waypoints[:, 5] *= desired_velocity
         
-
-        
-        
-
+        # Publish a marker array of blue waypoints:
+        global_ref_marker_array = MarkerArray()
+        for i in range(len(self.waypoints)):
+            marker = Marker()
+            marker.header.frame_id = "map"
+            marker.type = Marker.ARROW
+            marker.action = Marker.ADD
+            marker.id = i
+            marker.scale.x = 1.0 * self.waypoints_scale
+            marker.scale.y = 0.2 * self.waypoints_scale
+            marker.scale.z = 0.2 * self.waypoints_scale
+            marker.pose.position.x = self.waypoints[i, 1]
+            marker.pose.position.y = self.waypoints[i, 2]
+            marker.pose.position.z = 0.1
+            marker.pose.orientation.x = 0.0
+            marker.pose.orientation.y = 0.0
+            marker.pose.orientation.z = 0.0
+            marker.pose.orientation.w = 1.0
+            marker.color.a = 1.0
+            marker.color.r = 0.0
+            marker.color.g = 0.0
+            marker.color.b = 1.0
+            global_ref_marker_array.markers.append(marker)
+        self.global_ref_pub = self.create_publisher(MarkerArray, 'global_ref', 1)
+        self.global_ref_pub.publish(global_ref_marker_array)
 
         drive_topic = '/drive'
         if self.real_car:
@@ -394,6 +395,12 @@ class MPC(Node):
         self.odelta = None
         self.oa = None
         self.init_flag = 0
+
+        self.marker_pub = self.create_publisher(MarkerArray, 'mpc_sol', 1)
+        self.ref_pub = self.create_publisher(MarkerArray, 'mpc_ref', 1)
+
+        self.reference_marker_array = self._init_marker_array(self.config.TK + 1, color=(0.0, 1.0, 0.0))
+        self.solution_marker_array = self._init_marker_array(self.config.TK + 1, color=(1.0, 0.0, 0.0))
 
         self.initial_x = 0.0 # None
         self.initial_y = 0.0 #None
@@ -449,28 +456,90 @@ class MPC(Node):
             self.legend.addItem(self.predict_traj_plot, 'Predicted Trajectory')
             self.legend.addItem(self.ref_traj_plot, 'Reference Trajectory')
 
+    def _init_marker_array(self, num_markers, color=(1.0, 0.0, 1.0)):
+        marker_array = MarkerArray()
+        for i in range(num_markers):
+            marker = Marker()
+            marker.header.frame_id = "map"
+            marker.type = Marker.ARROW
+            marker.action = Marker.ADD
+            marker.id = i
+            marker.scale.x = 1.0 * self.waypoints_scale
+            marker.scale.y = 0.2 * self.waypoints_scale
+            marker.scale.z = 0.2 * self.waypoints_scale
+            marker.pose.position.x = 0.0
+            marker.pose.position.y = 0.0
+            marker.pose.position.z = 0.2
+            marker.pose.orientation.x = 0.0
+            marker.pose.orientation.y = 0.0
+            marker.pose.orientation.z = 0.0
+            marker.pose.orientation.w = 1.0
+            marker.color.a = 1.0
+            marker.color.r = color[0]
+            marker.color.g = color[1]
+            marker.color.b = color[2]
+            marker_array.markers.append(marker)
+        return marker_array
+    
+    def _update_marker_array(self, marker_array, points):
+        num_update = len(points)
+        if(len(marker_array.markers) < len(points)):
+            num_update = len(marker_array.markers)
+            
+        for i in range(num_update):
+            marker = marker_array.markers[i]
+            marker.pose.position.x = points[i][0]
+            marker.pose.position.y = points[i][1]
+        for i in range(num_update, len(marker_array.markers)):
+            marker = marker_array.markers[i]
+            marker.action = Marker.DELETE
+            
+        return marker_array
 
-    # def load_initial_pose(self):
-    #     wp = np.loadtxt(self.map_name, delimiter=",", skiprows=1, max_rows=1)
-    #     if   not self.real_car:
-    #         self.initial_x = wp[0]
-    #         self.initial_y = wp[1]
-    #         print(f"Initial pose on simulation: {self.initial_x}, {self.initial_y}")
+    def publish_waypoints_as_markers(self, waypoints=None, ref=False):
+        """ Publish waypoints as visualization markers in RViz """
+        if waypoints is None:
+            return
+        if ref:
+            marker_array = self.reference_marker_array
+        else:
+            marker_array = self.solution_marker_array
+        marker_array = self._update_marker_array(marker_array, waypoints)
+        if ref:
+            self.ref_pub.publish(marker_array)
+        else:
+            self.marker_pub.publish(marker_array)
+
+    def render_mpc_sol(self, ox, oy):
+        """
+        Publish the MPC solution as a Marker in RViz.
+        """
+        if ox is not None and oy is not None:
+            points = np.array([ox, oy]).T
+            self.publish_waypoints_as_markers(points, False)
+    
+    def render_mpc_ref(self, ref_path):
+        """
+        Publish the reference trajectory as a Marker in RViz.
+        """
+        if ref_path is not None:
+            points = ref_path[:2, :].T
+            self.publish_waypoints_as_markers(points, True)
 
     def pose_callback(self, pose_msg):
         vehicle_state = self.get_vehicle_state(pose_msg)
-        velocity = self.waypoints[:, 5] * 1.0
-        ref_path, closest_x, closest_y = self.calc_ref_trajectory(vehicle_state, self.waypoints[:, 1], self.waypoints[:, 2], self.waypoints[:,3], velocity)
+        ref_path, closest_x, closest_y = self.calc_ref_trajectory(vehicle_state, self.waypoints[:, 1], self.waypoints[:, 2], self.waypoints[:,3], self.waypoints[:, 5])
        
+        self.render_mpc_ref(ref_path)
         ref_path_local = transform_ref_traj_to_local_frame(ref_path, vehicle_state.x, vehicle_state.y, vehicle_state.yaw)
         
         # Calculate Cross-Track Error (CTE)
         # print("ref path x", ref_path[0, 0], "ref path y", ref_path[1, 0])
-        print("vehicle state x", vehicle_state.x, "vehicle state y", vehicle_state.y)
+        # print("vehicle state x", vehicle_state.x, "vehicle state y", vehicle_state.y)
         self.cte = np.linalg.norm(
             np.array([vehicle_state.x, vehicle_state.y]) - np.array([closest_x, closest_y])
         )
-        print("cte: ", self.cte)
+        # print("cte: ", self.cte)
         self.current_velocity = vehicle_state.v
         goal_velocity = ref_path[2,0]
 
@@ -484,6 +553,15 @@ class MPC(Node):
             ov,
             state_predict,
         ) = self.linear_mpc_control(ref_path_local, x0, self.oa, self.odelta_v)
+        # Transform the predicted trajectory from the vehicle (car) frame to the world frame
+        local_coords = np.vstack((ox, oy))
+        global_coords = transform_to_global_frame(local_coords, vehicle_state.x, vehicle_state.y, vehicle_state.yaw)
+        ox_global = global_coords[0, :]
+        oy_global = global_coords[1, :]
+
+        # Use the transformed global coordinates for rendering the MPC solution in RViz
+        self.render_mpc_sol(ox_global, oy_global)
+        # self.render_mpc_sol(ox, oy)
 
 
         self.csv_writer.writerow([
@@ -499,10 +577,11 @@ class MPC(Node):
 
         steer_output = self.odelta_v[0]
         speed_output = vehicle_state.v + self.oa[0] * self.config.DTK
-        print("speed output: ", speed_output, 'steer output: ', steer_output)
+        # print("speed output: ", speed_output, 'steer output: ', steer_output)
         self.drive_msg.drive.steering_angle = steer_output
         self.drive_msg.drive.speed = speed_output
         self.pub_drive.publish(self.drive_msg)
+        print(f"Speed: {speed_output}, Steering: {steer_output}")
 
         if self.plot:
             # Append current car position to trajectory points
@@ -548,7 +627,6 @@ class MPC(Node):
             vehicle_state.yaw = math.atan2(2 * (curr_quat.w * curr_quat.z + curr_quat.x * curr_quat.y),
                               1 - 2 * (curr_quat.y ** 2 + curr_quat.z ** 2))
             vehicle_state.yaw += math.pi
-            # vehicle_state.yaw = np.arctan2(np.sin(vehicle_state.yaw), np.cos(vehicle_state.yaw))
             vehicle_state.v = self.gnss_speed
         else:
             if self.initial_x==None or self.initial_y==None:
@@ -560,15 +638,7 @@ class MPC(Node):
             curr_quat = pose_msg.pose.pose.orientation
             vehicle_state.yaw = math.atan2(2 * (curr_quat.w * curr_quat.z + curr_quat.x * curr_quat.y),
                               1 - 2 * (curr_quat.y ** 2 + curr_quat.z ** 2))
-            # vehicle_state.yaw = np.arctan2(np.sin(vehicle_state.yaw), np.cos(vehicle_state.yaw))
-            
-            # print("yaw: ", vehicle_state.yaw)
-            vehicle_state.v = self.drive_msg.drive.speed
-            # vehicle_state.v = pose_msg.twist.twist.linear.x
-
-        # quat = [quat_msg.x, quat_msg.y, quat_msg.z, quat_msg.w]
-        # vehicle_state.yaw = math.atan2(2 * (quat[3] * quat[2] + quat[0] * quat[1]), 1 - 2 * (quat[1] ** 2 + quat[2] ** 2))
-        
+            vehicle_state.v = pose_msg.twist.twist.linear.x
         return vehicle_state
 
     def mpc_prob_init(self):
@@ -775,20 +845,16 @@ class MPC(Node):
         :return: reference trajectory ref_traj, reference steering angle
         """
         tock = time.time()
-        sin_yaw_continuous = np.arctan2(np.sin(state.yaw), np.cos(state.yaw))
         # Create placeholder Arrays for the reference trajectory for T steps
         ref_traj = np.zeros((self.config.NXK, self.config.TK + 1))
         ncourse = len(cx)
-        # print(f"1 {time.time() - tock}")
 
         # Find nearest index/setpoint from where the trajectories are calculated
         _, _, ind = get_dists_to_point_on_trajectory(np.array([state.x, state.y]), np.array([cx, cy]).T)
-        # print(f"2 {time.time() - tock}")
 
         # Load the initial parameters from the setpoint into the trajectory
         ref_traj[0, 0] = cx[ind]
         ref_traj[1, 0] = cy[ind]
-        print("ref traj x", ref_traj[0, 0], "ref traje y", ref_traj[1, 0])
         closest_x = ref_traj[0, 0]
         closest_y = ref_traj[1, 0]
         ref_traj[2, 0] = sp[ind]
@@ -796,8 +862,7 @@ class MPC(Node):
 
         # based on current velocity, distance traveled on the ref line between time steps
         travel = abs(state.v) * self.config.DTK
-        dind = travel / self.config.dlk
-        dind = 2
+        dind = travel / (self.config.dlk)
         ind_list = int(ind) + np.insert(
             np.cumsum(np.repeat(dind, self.config.TK)), 0, 0
         ).astype(int)
@@ -807,21 +872,8 @@ class MPC(Node):
         ref_traj[2, :] = sp[ind_list]
         # print(f"3 {time.time() - tock}")
 
-        angle_thres = 4.5
-
-        # cyaw_continuous = np.arctan2(self.sin_yaw, self.cos_yaw)
-        # yaw_diff = cyaw_continuous - state.yaw
-        # cyaw_continuous -= np.where(yaw_diff > angle_thres, 2 * np.pi, 0)
-        # cyaw_continuous += np.where(yaw_diff < -angle_thres, 2 * np.pi, 0)
-        cyaw_continuous = self.waypoints[:, 3]  # Use the unwrapped yaw angles directly
-
-
+        cyaw_continuous = self.waypoints[:, 3].copy()  # Use the unwrapped yaw angles directly
         ref_traj[3, :] = cyaw_continuous[ind_list]
-
-        # ref_traj[3, :] = cyaw[ind_list]
-        # print(f"4 {time.time() - tock}")
-
-
         return ref_traj, closest_x, closest_y
     
     def predict_motion(self, x0, oa, od, xref):
@@ -989,7 +1041,7 @@ class MPC(Node):
         # - Column 5: speed command
 
         # Extract x, y, and speed data
-        waypoints = self.waypoints
+        waypoints = self.waypoints.copy()
         x_coords = waypoints[:, 1]
         y_coords = waypoints[:, 2]
         speeds = waypoints[:, 5]  # Assuming speed is in the 6th column

@@ -146,7 +146,8 @@ class NMPCPlannerNode(Node):
         WAYPOINTS_SUBSAMPLE_STEP = 10
         self.waypoints = self.waypoints[::WAYPOINTS_SUBSAMPLE_STEP, :]
         
-        self.marker_pub = self.create_publisher(MarkerArray, 'waypoints_markers', 1)
+        self.marker_pub = self.create_publisher(MarkerArray, 'mpc_sol', 1)
+        self.ref_pub = self.create_publisher(MarkerArray, 'mpc_ref', 1)
         # self.timer = self.create_timer(1.0, self.publish_waypoints_as_markers)
         # self.publish_waypoints_as_markers(self.waypoints, False)
 
