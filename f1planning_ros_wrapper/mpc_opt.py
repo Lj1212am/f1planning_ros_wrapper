@@ -306,7 +306,7 @@ class MPC(Node):
         super().__init__('mpc_node')
         self.plot = False
 
-        self.real_car = False
+        self.real_car = True
         self.config_path = "/home/nvidia/ros_ws/src/f1-fifth/src/trajectory_csv"
 
         self.declare_parameter('csv_suffix', 'kin_mpc')
@@ -341,7 +341,7 @@ class MPC(Node):
         WAYPOINTS_END = -1
         WAYPOINTS_SCALE = 1.0
         self.waypoints = self.waypoints[:WAYPOINTS_END,:]
-        self.waypoints[:, 1] *= 1.7 
+        # self.waypoints[:, 1] *= 1.7 
         # self.waypoints[:, 3] += math.pi/2
         # self.waypoints[:, 3] = np.unwrap(self.waypoints[:, 3])
         # self.waypoints[:, 1:3] *= WAYPOINTS_SCALE
@@ -455,7 +455,7 @@ class MPC(Node):
 
     def pose_callback(self, pose_msg):
         vehicle_state = self.get_vehicle_state(pose_msg)
-        velocity = self.waypoints[:, 5] * 7.0
+        velocity = self.waypoints[:, 5] * 4.0
         ref_path, closest_x, closest_y = self.calc_ref_trajectory(vehicle_state, self.waypoints[:, 1], self.waypoints[:, 2], self.waypoints[:,3], velocity)
        
         ref_path_local = transform_ref_traj_to_local_frame(ref_path, vehicle_state.x, vehicle_state.y, vehicle_state.yaw)

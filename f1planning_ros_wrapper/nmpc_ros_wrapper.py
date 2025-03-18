@@ -18,13 +18,14 @@ from f1tenth_gym.envs.track import Track
 import casadi as ca
 
 
-from f1tenth_planning.control.nonlinear_mpc.nonlinear_dmpc import NMPCPlanner, mpc_config
+from f1tenth_planning.control.nonlinear_mpc.nonlinear_frenet_dmpc import NMPCPlanner, mpc_config
 
 
 # Ros2 imports
 from nav_msgs.msg import Odometry
 from ackermann_msgs.msg import AckermannDriveStamped
 from geometry_msgs.msg import PoseWithCovarianceStamped, Point
+from friction_interfaces.msg import Float32Stamped
 import message_filters
 from visualization_msgs.msg import MarkerArray, Marker
 from PyQt5.QtWidgets import QApplication
@@ -41,7 +42,7 @@ class NMPCPlannerNode(Node):
     def __init__(self):
         super().__init__('nmpc_planner_node')
         self.plot = False
-        self.real_car = False
+        self.real_car = True
         # Declare a ROS parameter for the output CSV file name suffix
         self.declare_parameter('csv_suffix', 'nmpc')
 
@@ -57,12 +58,12 @@ class NMPCPlannerNode(Node):
         # self.sin_yaw = np.sin(self.waypoints[:, 3])
         # self.cos_yaw = np.cos(self.waypoints[:, 3])
 
-        # clark_park_origin_x = -909.49280
-        # clark_park_origin_y = 790.9008
-        clark_park_origin_x = 0.0
-        clark_park_origin_y = 0.0 
+        clark_park_origin_x = -910.49280
+        clark_park_origin_y = 790.9008
+        # clark_park_origin_x = 0.0
+        # clark_park_origin_y = 0.0 
         
-        x = self.waypoints[:, 1] * 1.7 + clark_park_origin_x  #* 2.0#+ 1.2
+        x = self.waypoints[:, 1] * 1.0 + clark_park_origin_x  #* 2.0#+ 1.2
         y = self.waypoints[:, 2] + clark_park_origin_y#* 2.0#  1.1
         # x = self.waypoints[:, 0] * 3.0
         # y = self.waypoints[:, 1] * 3.0
@@ -71,7 +72,7 @@ class NMPCPlannerNode(Node):
         
         # v = np.sqrt(velx**2 + vely**2)
         # v = self.waypoints[:, 5]
-        v = np.ones_like(x)  * 7.0
+        v = np.ones_like(x)  * 5.0
         
         
         # Now pass the processed x, y, and velx to the Track class
@@ -124,7 +125,7 @@ class NMPCPlannerNode(Node):
         self.sub_ackermann = self.create_subscription(AckermannDriveStamped, drive_topic, self.ackerman_callback, 1)
         self.pub_drive = self.create_publisher(AckermannDriveStamped, drive_topic, 1)
         self.pub_mpc_sol = self.create_publisher(Marker, 'mpc_solution', 10)
-        self.sub_mu = self.create_subscription(Float32, 'friction_value', self.friction_callback, 10) 
+        self.sub_mu = self.create_subscription(Float32Stamped, 'friction_value', self.friction_callback, 10) 
 
         # Initialize the NMPCPlanner with default parameters
         print('setting config')
@@ -326,7 +327,7 @@ class NMPCPlannerNode(Node):
             # Log the cross-track error to the CSV file
             current_time = self.get_clock().now().to_msg()
             timestamp = f"{current_time.sec}.{current_time.nanosec}"
-            cross_track_error = self.planner.cte  # Access the cross-track error
+            cross_track_error = self.planner.ey  # Access the cross-track error
             current_velocity = self.planner.curr_vel  # Access the current velocity
             goal_velocity = self.planner.goal_vel  # Access the goal velocity
             #add xy to the csv
